@@ -2,6 +2,15 @@ use super::poseidon::{PoseidonT3, PoseidonT6};
 use ink_prelude::vec::Vec;
 pub struct Hasher;
 impl Hasher {
+    pub fn u128_to_bytes(value: u128) -> [u8; 32] {
+        let bytes = value.to_be_bytes();
+        let mut bytes32 = [0u8; 32];
+        for i in 0..bytes.len() {
+            bytes32[i] = bytes[i];
+        }
+        bytes32
+    }
+
     pub fn hash5(array: [[u8; 32]; 5]) -> [u8; 32] {
         PoseidonT6::poseidon(array)
     }

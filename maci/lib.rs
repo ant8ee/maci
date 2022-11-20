@@ -3,28 +3,36 @@
 use ink_lang as ink;
 mod library;
 mod tree;
+macro_rules! ensure {
+    ( $condition:expr, $error:expr $(,)? ) => {{
+        if !$condition {
+            return ::core::result::Result::Err(::core::convert::Into::into($error));
+        }
+    }};
+}
 #[ink::contract]
 mod maci {
 
     use super::*;
 
-   use ink_storage::{
-        traits::{PackedAllocate, PackedLayout, SpreadAllocate, SpreadLayout},
-        Mapping,
-    };
-use hex_literal::hex;
-
     use crate::library::{
-        computeroot::ComputeRoot, domainobjs::DomainObjs,
-        hasher::Hasher,poseidon::PoseidonT3
+        computeroot::ComputeRoot, domainobjs::DomainObjs, hasher::Hasher, poseidon::PoseidonT3,
+        verifytally::VerifyTally,
     };
     use crate::tree::hasher::Poseidon;
     use crate::tree::merkle_tree::{
         MerkleTree, MerkleTreeError, DEFAULT_ROOT_HISTORY_SIZE, MAX_DEPTH,
     };
+    use hex_literal::hex;
+    use ink_prelude::{vec, vec::Vec};
+    use ink_storage::{
+        traits::{PackedAllocate, PackedLayout, SpreadAllocate, SpreadLayout},
+        Mapping,
+    };
 
     type PoseidonHash = [u8; 32];
-
+    const SNARK_SCALAR_FIELD: [u8; 32] =
+        hex!("30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001");
     #[derive(scale::Decode, scale::Encode)]
     #[cfg_attr(
         feature = "std",
@@ -37,13 +45,15 @@ use hex_literal::hex;
         )
     )]
     pub struct Message {
-        /// The selector bytes that identifies the function of the callee that should be called.
+        /// The selector bytes that identifies the fn of the callee that should be called.
         pub iv: [u8; 32],
-        /// The SCALE encoded parameters that are passed to the called function.
+        /// The SCALE encoded parameters that are passed to the called fn.
         pub data: [[u8; 32]; 10],
     }
 
-    #[derive(Default,scale::Decode, scale::Encode,Clone,SpreadAllocate,SpreadLayout,PackedLayout)]
+    #[derive(
+        Default, scale::Decode, scale::Encode, Clone, SpreadAllocate, SpreadLayout, PackedLayout,
+    )]
     #[cfg_attr(
         feature = "std",
         derive(
@@ -55,13 +65,15 @@ use hex_literal::hex;
         )
     )]
     pub struct PubKey {
-        /// The selector bytes that identifies the function of the callee that should be called.
+        /// The selector bytes that identifies the fn of the callee that should be called.
         pub x: [u8; 32],
-        /// The SCALE encoded parameters that are passed to the called function.
+        /// The SCALE encoded parameters that are passed to the called fn.
         pub y: [u8; 32],
     }
 
-    #[derive(Default,scale::Decode, scale::Encode,Clone,SpreadAllocate,SpreadLayout,PackedLayout)]
+    #[derive(
+        Default, scale::Decode, scale::Encode, Clone, SpreadAllocate, SpreadLayout, PackedLayout,
+    )]
     #[cfg_attr(
         feature = "std",
         derive(
@@ -77,6 +89,18 @@ use hex_literal::hex;
         pub vote_option_tree_root: [u8; 32],
         pub voice_credit_balance: [u8; 32],
         pub nonce: [u8; 32],
+    }
+
+    #[ink(event)]
+    pub struct SignUp {
+        _user_pub_key: PubKey,
+        _state_index: u128,
+        voice_credit_balance: Balance,
+    }
+    #[ink(event)]
+    pub struct PublishMessage {
+        _message: Message,
+        _enc_pub_key: PubKey,
     }
 
     /// Defines the storage of your contract.
@@ -179,7 +203,6 @@ use hex_literal::hex;
         // To store hash_left_right(Merkle root of 5 ** vote_option_tree_depth zeros, 0)
         current_per_vo_spent_voice_credits_commitment: [u8; 32],
     }
-
     /// Errors which my be returned from the smart contract
     #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
@@ -198,6 +221,11 @@ use hex_literal::hex;
         SignupPeriodNotOver,
         VotingPeriodPassed,
         VotingPeriodNotOver,
+        OnlyTheCoordinatorCanPublishMessagesInDebugMode,
+        MessageLimitReached,
+        OnlyTheCoordinatorCanSubmitSignupsInDebugMode,
+        MaximumNumberOfSignupsReached,
+        TooManyVoiceCredits,
     }
 
     pub type Result<T> = core::result::Result<T, Error>;
@@ -218,90 +246,434 @@ use hex_literal::hex;
             coordinator_pub_key: PubKey,
             coordinator_address: AccountId,
         ) -> Self {
-            ink::utils::initialize_contract(|_self: &mut Self| {
-                _self.coordinator_address = coordinator_address;
-                _self.tree_depths = tree_depths;
-                _self.tally_batch_size = batch_sizes[0];
-                _self.message_batch_size = batch_sizes[1];
+            ink::utils::initialize_contract(|se1f: &mut Self| {
+                se1f.has_unprocessed_messages = true;
+                se1f.coordinator_address = coordinator_address;
+                se1f.tree_depths = tree_depths;
+                se1f.tally_batch_size = batch_sizes[0];
+                se1f.message_batch_size = batch_sizes[1];
                 // Set the verifier contracts
-                _self.batch_ust_verifier = batch_ust_verifier;
-                _self.qvt_verifier = qvt_verifier;
+                se1f.batch_ust_verifier = batch_ust_verifier;
+                se1f.qvt_verifier = qvt_verifier;
                 // Set the sign-up duration
-                _self.sign_up_timestamp = Self::env().block_timestamp() as u128;
-                _self.sign_up_duration_seconds = sign_up_duration_seconds;
-                _self.voting_duration_seconds = voting_duration_seconds;
+                se1f.sign_up_timestamp = Self::env().block_timestamp() as u128;
+                se1f.sign_up_duration_seconds = sign_up_duration_seconds;
+                se1f.voting_duration_seconds = voting_duration_seconds;
                 // Set the sign-up gatekeeper contract
-                _self.sign_up_gatekeeper = sign_up_gatekeeper;
+                se1f.sign_up_gatekeeper = sign_up_gatekeeper;
                 // Set the initial voice credit balance proxy
-                _self.initial_voice_credit_proxy = initial_voice_credit_proxy;
+                se1f.initial_voice_credit_proxy = initial_voice_credit_proxy;
                 // Set the coordinator's public key
-                _self.coordinator_pub_key =coordinator_pub_key;// [coordinator_pub_key.x,coordinator_pub_key.y];
+                se1f.coordinator_pub_key = coordinator_pub_key; // [coordinator_pub_key.x,coordinator_pub_key.y];
 
                 // Calculate and cache the max number of leaves for each tree.
                 // They are used as public inputs to the batch update state tree snark.
-                _self.message_tree_max_leaf_index = 2u128.pow(tree_depths[1] as u32) - 1;
+                se1f.message_tree_max_leaf_index = 2u128.pow(tree_depths[1] as u32) - 1;
 
                 // Check and store the maximum number of signups
                 // It is the user's responsibility to ensure that the state tree depth
                 // is just large enough and not more, or they will waste gas.
                 let state_tree_max_leaf_index = 2u128.pow(tree_depths[0] as u32) - 1;
-                _self.max_users = max_values[0];
+                se1f.max_users = max_values[0];
                 // The maximum number of messages
                 assert!(
                     max_values[0] <= state_tree_max_leaf_index
-                        || max_values[1] <= _self.message_tree_max_leaf_index,
+                        || max_values[1] <= se1f.message_tree_max_leaf_index,
                     "E10"
                 );
-                _self.max_messages = max_values[1];
+                se1f.max_messages = max_values[1];
                 // The maximum number of leaves, minus one, of meaningful vote options.
                 // This allows the snark to do a no-op if the user votes for an option
                 // which has no meaning attached to it
-                _self.vote_options_max_leaf_index = max_values[2];
-                _self.message_tree =
+                se1f.vote_options_max_leaf_index = max_values[2];
+                se1f.message_tree =
                     MerkleTree::<MAX_DEPTH, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new().unwrap();
                 // Calculate and store the empty vote option tree root. This value must
                 // be set before we call hashedBlankStateLeaf() later
-                _self.empty_vote_option_tree_root =
+                se1f.empty_vote_option_tree_root =
                     Self::calc_empty_vote_option_tree_root(tree_depths[2]);
                 // Calculate and store a commitment to 5 ** voteOptionTreeDepth zeros,
                 // and a salt of 0.
 
-                _self.original_current_results_commitment =
-                     Hasher::hash_left_right(_self.empty_vote_option_tree_root, [0u8;32]);
+                se1f.original_current_results_commitment =
+                    Hasher::hash_left_right(se1f.empty_vote_option_tree_root, [0u8; 32]);
 
-                _self.current_results_commitment = _self.original_current_results_commitment;
-                _self.original_spent_voice_credits_commitment = Hasher::hash_left_right([0u8;32], [0u8;32]);
+                se1f.current_results_commitment = se1f.original_current_results_commitment;
+                se1f.original_spent_voice_credits_commitment =
+                    Hasher::hash_left_right([0u8; 32], [0u8; 32]);
 
-                _self.current_spent_voice_credits_commitment =
-                    _self.original_spent_voice_credits_commitment;
-                _self.current_per_vo_spent_voice_credits_commitment =
-                    _self.original_current_results_commitment;
+                se1f.current_spent_voice_credits_commitment =
+                    se1f.original_spent_voice_credits_commitment;
+                se1f.current_per_vo_spent_voice_credits_commitment =
+                    se1f.original_current_results_commitment;
 
                 // Compute the hash of a blank state leaf
-                let h = Self::hashed_blank_state_leaf(_self.empty_vote_option_tree_root);
+                let h = Self::hashed_blank_state_leaf(se1f.empty_vote_option_tree_root);
 
                 // Create the state tree
-                _self.state_tree =
+                se1f.state_tree =
                     MerkleTree::<MAX_DEPTH, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new().unwrap();
                 // Make subsequent insertions start from leaf #1, as leaf #0 is only
                 // updated with random data if a command is invalid.
-                _self.state_tree.insert(h);
+                se1f.state_tree.insert(h);
             })
         }
 
-        /// A message that can be called on instantiated contracts.
-        /// This one flips the value of the stored `bool` from `true`
-        /// to `false` and vice versa.
-        #[ink(message)]
-        pub fn flip(&mut self) {
-            // self.value = !self.value;
+        /*
+         * Returns the deadline to sign up.
+         */
+        fn calc_sign_up_deadline(&self) -> u128 {
+            self.sign_up_timestamp + self.sign_up_duration_seconds
         }
 
-        /// Simply returns the current value of our `bool`.
-        #[ink(message)]
-        pub fn get(&self) -> [u8; 32] {
-            PoseidonT3::poseidon([[0u8; 32]; 2])
+        /*
+         * Ensures that the calling fn only continues execution if the
+         * current block time is before the sign-up deadline.
+         */
+        fn is_before_sign_up_deadline(&self) -> Result<()> {
+            if self.sign_up_duration_seconds != 0 {
+                ensure!(
+                    (self.env().block_timestamp() as u128) < self.calc_sign_up_deadline(),
+                    Error::SignupPeriodPassed
+                );
+            }
+            Ok(())
         }
+
+        /*
+         * Ensures that the calling fn only continues execution if the
+         * current block time is after or equal to the sign-up deadline.
+         */
+        fn is_after_sign_up_deadline(&self) -> Result<()> {
+            if self.sign_up_duration_seconds != 0 {
+                ensure!(
+                    self.env().block_timestamp() as u128 >= self.calc_sign_up_deadline(),
+                    Error::SignupPeriodNotOver
+                );
+            }
+            Ok(())
+        }
+
+        /*
+         * Returns the deadline to vote
+         */
+        fn calc_voting_deadline(&self) -> u128 {
+            self.calc_sign_up_deadline() + self.voting_duration_seconds
+        }
+
+        /*
+         * Ensures that the calling fn only continues execution if the
+         * current block time is before the voting deadline.
+         */
+        fn is_before_voting_deadline(&self) -> Result<()> {
+            if self.voting_duration_seconds != 0 {
+                ensure!(
+                    (self.env().block_timestamp() as u128) < self.calc_voting_deadline(),
+                    Error::VotingPeriodPassed
+                );
+            }
+            Ok(())
+        }
+
+        /*
+         * Ensures that the calling fn only continues execution if the
+         * current block time is after or equal to the voting deadline.
+         */
+        fn is_after_voting_deadline(&self) -> Result<()> {
+            if self.voting_duration_seconds != 0 {
+                ensure!(
+                    self.env().block_timestamp() as u128 >= self.calc_voting_deadline(),
+                    Error::VotingPeriodNotOver
+                );
+            }
+            Ok(())
+        }
+
+        /*
+         * Allows a user who is eligible to sign up to do so. The sign-up
+         * gatekeeper will prevent double sign-ups or ineligible users from signing
+         * up. This fn will only succeed if the sign-up deadline has not
+         * passed. It also inserts a fresh state leaf into the state tree.
+         * @param _user_pub_key The user's desired public key.
+         * @param _sign_up_gatekeeper_data Data to pass to the sign-up gatekeeper's
+         *     register() fn. For instance, the POAPGatekeeper or
+         *     Sign_up_token_gatekeeper requires this value to be the ABI-encoded
+         *     token ID.
+         */
+        fn sign_up(
+            &mut self,
+            _user_pub_key: PubKey,
+            _sign_up_gatekeeper_data: Vec<u8>,
+            _initial_voice_credit_proxy_data: Vec<u8>,
+        ) -> Result<()> {
+            self.is_before_sign_up_deadline()?;
+            if self.sign_up_duration_seconds == 0 {
+                ensure!(
+                    self.env().caller() == self.coordinator_address,
+                    Error::OnlyTheCoordinatorCanSubmitSignupsInDebugMode
+                );
+            }
+
+            ensure!(
+                self.num_sign_ups < self.max_users,
+                Error::MaximumNumberOfSignupsReached
+            );
+
+            // Register the user via the sign-up gatekeeper. This fn should
+            // throw if the user has already registered or if ineligible to do so.
+            self.sign_up_gatekeeper_register(self.env().caller(), _sign_up_gatekeeper_data)?;
+
+            let voice_credit_balance = self.initial_voice_credit_proxy_get_voice_credits(
+                self.env().caller(),
+                _initial_voice_credit_proxy_data,
+            )?;
+
+            // The limit on voice credits is 2 ^ 32 which is hardcoded into the
+            // Update_state_tree circuit, specifically at check that there are
+            // sufficient voice credits (using Greater_eq_than(32)).
+            ensure!(
+                voice_credit_balance <= 4294967296,
+                Error::TooManyVoiceCredits
+            );
+
+            // Create, hash, and insert a fresh state leaf
+            let state_leaf = StateLeaf {
+                pub_key: _user_pub_key.clone(),
+                vote_option_tree_root: self.empty_vote_option_tree_root,
+                voice_credit_balance: Hasher::u128_to_bytes(voice_credit_balance),
+                nonce: [0u8; 32],
+            };
+
+            let hashed_leaf = DomainObjs::hash_state_leaf(&state_leaf);
+
+            // Insert the leaf
+            self.state_tree.insert(hashed_leaf);
+
+            // Update a copy of the state tree root
+            self.state_root = self.get_state_tree_root();
+
+            self.num_sign_ups += 1;
+
+            // num_sign_ups is equal to the state index of the leaf which was just
+            // added to the state tree above
+            self.env().emit_event(SignUp {
+                _user_pub_key,
+                _state_index: self.num_sign_ups,
+                voice_credit_balance,
+            });
+            Ok(())
+        }
+        fn sign_up_gatekeeper_register(&mut self, user: AccountId, data: Vec<u8>) -> Result<()> {
+            Ok(())
+        }
+        fn initial_voice_credit_proxy_get_voice_credits(
+            &mut self,
+            user: AccountId,
+            data: Vec<u8>,
+        ) -> Result<Balance> {
+            Ok(Balance::default())
+        }
+        /*
+         * Allows anyone to publish a message (an encrypted command and signature).
+         * This fn also inserts it into the message tree.
+         * @param _message The message to publish
+         * @param _enc_pub_key An epheremal public key which can be combined with the
+         *     coordinator's private key to generate an ECDH shared key which which was
+         *     used to encrypt the message.
+         */
+        fn publish_message(&mut self, _message: Message, _enc_pub_key: PubKey) -> Result<()> {
+            self.is_before_voting_deadline()?;
+            if self.sign_up_duration_seconds == 0 {
+                ensure!(
+                    self.env().caller() == self.coordinator_address,
+                    Error::OnlyTheCoordinatorCanPublishMessagesInDebugMode
+                );
+            }
+
+            ensure!(
+                self.num_messages < self.max_messages,
+                Error::MessageLimitReached
+            );
+
+            // Calculate leaf value
+            let leaf = DomainObjs::hash_message(&_message);
+
+            // Insert the new leaf into the message tree
+            self.message_tree.insert(leaf);
+
+            self.current_message_batch_index = (self.num_messages
+                / self.message_batch_size as u128)
+                * self.message_batch_size as u128;
+
+            self.num_messages += 1;
+            self.env().emit_event(PublishMessage {
+                _message,
+                _enc_pub_key,
+            });
+            Ok(())
+        }
+
+        /*
+         * A helper fn to convert an array of 8 uint256 values into the a, b,
+         * and c array values that the zk-SNARK verifier's verify_proof accepts.
+         */
+        fn unpack_proof(
+            &self,
+            _proof: [[u8; 32]; 8],
+        ) -> ([[u8; 32]; 2], [[[u8; 32]; 2]; 2], [[u8; 32]; 2]) {
+            (
+                [_proof[0], _proof[1]],
+                [[_proof[2], _proof[3]], [_proof[4], _proof[5]]],
+                [_proof[6], _proof[7]],
+            )
+        }
+
+        /*
+         * A helper fn to create the public_signals array from meaningful
+         * parameters.
+         * @param _new_state_root The new state root after all messages are processed
+         * @param _ecdh_pub_keys The public key used to generated the ECDH shared key
+         *                     to decrypt the message
+         */
+        fn gen_batch_ust_public_signals(
+            &self,
+            _new_state_root: [u8; 32],
+            _ecdh_pub_keys: Vec<PubKey>,
+        ) -> Vec<[u8; 32]> {
+            let message_batch_end_index = if self.current_message_batch_index
+                + self.message_batch_size as u128
+                <= self.num_messages
+            {
+                self.current_message_batch_index + self.message_batch_size as u128 - 1
+            } else {
+                self.num_messages - 1
+            };
+            let n = self.message_batch_size as usize;
+            let mut public_signals = vec![[0u8; 32]; 12 + n * 3];
+            public_signals[0] = _new_state_root;
+            public_signals[1] = self.coordinator_pub_key.x;
+            public_signals[2] = self.coordinator_pub_key.y;
+            public_signals[3] = Hasher::u128_to_bytes(self.vote_options_max_leaf_index);
+            public_signals[4] = self.message_tree.get_last_root();
+            public_signals[5] = Hasher::u128_to_bytes(self.current_message_batch_index);
+            public_signals[6] = Hasher::u128_to_bytes(message_batch_end_index);
+            public_signals[7] = Hasher::u128_to_bytes(self.num_sign_ups);
+
+            for i in 0..n {
+                let x = 8 + i * 2;
+                let y = x + 1;
+                public_signals[x] = _ecdh_pub_keys[i].x;
+                public_signals[y] = _ecdh_pub_keys[i].y;
+            }
+
+            public_signals
+        }
+
+        /*
+         * Update the state_root if the batch update state root proof is
+         * valid.
+         * @param _new_state_root The new state root after all messages are processed
+         * @param _ecdh_pub_keys The public key used to generated the ECDH shared key
+         *                     to decrypt the message
+         * @param _proof The zk-SNARK proof
+         */
+        fn batch_process_message(
+            &mut self,
+            _new_state_root: [u8; 32],
+            _ecdh_pub_keys: Vec<PubKey>,
+            _proof: [[u8; 32]; 8],
+        ) -> Result<()> {
+            self.is_after_voting_deadline()?;
+
+            // Ensure that the current batch index is within range
+            ensure!(self.has_unprocessed_messages, Error::NoMoreMessages);
+
+            ensure!(
+                _ecdh_pub_keys.len() as u8 == self.message_batch_size,
+                Error::InvalidEcdhPubkeysLength
+            );
+
+            // Ensure that current_message_batch_index is within range
+            ensure!(
+                self.current_message_batch_index <= self.message_tree_max_leaf_index,
+                Error::CurrentMessageBatchOutOfRange
+            );
+
+            // Assemble the public inputs to the snark
+            let public_signals = self.gen_batch_ust_public_signals(_new_state_root, _ecdh_pub_keys);
+
+            // Ensure that each public input is within range of the snark scalar
+            // field.
+            // TODO: consider having more granular revert reasons
+            // TODO: this check is already performed in the verifier contract
+            for public_signal in &public_signals {
+                ensure!(
+                    public_signal < &SNARK_SCALAR_FIELD,
+                    Error::PublicSignalTooLarge
+                );
+            }
+
+            // Unpack the snark proof
+            let (a, b, c) = self.unpack_proof(_proof);
+
+            // Verify the proof
+            ensure!(
+                self.batch_ust_verifier_verify_proof(a, b, c, public_signals),
+                Error::InvalidBatchUstProof
+            );
+
+            // Increase the message batch start index to ensure that each message
+            // batch is processed in order
+            if self.current_message_batch_index == 0 {
+                self.has_unprocessed_messages = false;
+            } else {
+                self.current_message_batch_index -= self.message_batch_size as u128;
+            }
+
+            // Update the state root
+            self.state_root = _new_state_root;
+            if self.state_root_before_processing == [0u8; 32] {
+                self.state_root_before_processing = self.state_root;
+            }
+            Ok(())
+        }
+        fn batch_ust_verifier_verify_proof(
+            &self,
+            a: [[u8; 32]; 2],
+            b: [[[u8; 32]; 2]; 2],
+            c: [[u8; 32]; 2],
+            input: Vec<[u8; 32]>,
+        ) -> bool {
+            true
+        }
+        /*
+         * Returns the public signals required to verify a quadratic vote tally
+         * snark.
+         */
+        fn gen_qvt_public_signals(
+            &self,
+            _intermediate_state_root: [u8; 32],
+            _new_results_commitment: [u8; 32],
+            _new_spent_voice_credits_commitment: [u8; 32],
+            _new_per_vo_spent_voice_credits_commitment: [u8; 32],
+            _total_votes: u128,
+        ) -> [[u8; 32]; 10] {
+            let current_qvt_batch_num = Hasher::u128_to_bytes(self.current_qvt_batch_num);
+            let total_votes = Hasher::u128_to_bytes(_total_votes);
+            [
+                _new_results_commitment,
+                _new_spent_voice_credits_commitment,
+                _new_per_vo_spent_voice_credits_commitment,
+                total_votes,
+                self.state_root,
+                current_qvt_batch_num,
+                _intermediate_state_root,
+                self.current_results_commitment,
+                self.current_spent_voice_credits_commitment,
+                self.current_per_vo_spent_voice_credits_commitment,
+            ]
+        }
+
         fn hashed_blank_state_leaf(empty_vote_option_tree_root: [u8; 32]) -> [u8; 32] {
             // The pubkey is the first Pedersen base point from iden3's circomlib
             let state_leaf = StateLeaf {
@@ -316,8 +688,191 @@ use hex_literal::hex;
 
             DomainObjs::hash_state_leaf(&state_leaf)
         }
+
+        fn has_untallied_state_leaves(&self) -> bool {
+            self.current_qvt_batch_num < (1 + (self.num_sign_ups / self.tally_batch_size as u128))
+        }
+
+        /*
+         * Tally the next batch of state leaves.
+         * @param _intermediate_state_root The intermediate state root, which is
+         *     generated from the current batch of state leaves
+         * @param _new_results_commitment A hash of the tallied results so far
+         *     (cumulative)
+         * @param _proof The zk-SNARK proof
+         */
+        fn prove_vote_tally_batch(
+            &mut self,
+            _intermediate_state_root: [u8; 32],
+            _new_results_commitment: [u8; 32],
+            _new_spent_voice_credits_commitment: [u8; 32],
+            _new_per_vo_spent_voice_credits_commitment: [u8; 32],
+            _total_votes: u128,
+            _proof: [[u8; 32]; 8],
+        ) -> Result<()> {
+            ensure!(self.num_sign_ups > 0, Error::NoSignups);
+            let total_batches = 1 + (self.num_sign_ups / self.tally_batch_size as u128);
+
+            // Ensure that the batch # is within range
+            ensure!(
+                self.current_qvt_batch_num < total_batches,
+                Error::AllBatchesTallied
+            );
+
+            // Generate the public signals
+            // public 'input' signals = [output signals, public inputs]
+            let public_signals = self.gen_qvt_public_signals(
+                _intermediate_state_root,
+                _new_results_commitment,
+                _new_spent_voice_credits_commitment,
+                _new_per_vo_spent_voice_credits_commitment,
+                _total_votes,
+            );
+
+            // Ensure that each public input is within range of the snark scalar
+            // field.
+            // TODO: consider having more granular revert reasons
+            for public_signal in &public_signals {
+                ensure!(
+                    public_signal < &SNARK_SCALAR_FIELD,
+                    Error::PublicSignalTooLarge
+                );
+            }
+
+            // Unpack the snark proof
+            let (a, b, c) = self.unpack_proof(_proof);
+
+            // Verify the proof
+            let is_valid = self.qvt_verifier_verify_proof(a, b, c, public_signals);
+
+            ensure!(is_valid == true, Error::InvalidTallyProof);
+
+            // Save the commitment to the new results for the next batch
+            self.current_results_commitment = _new_results_commitment;
+
+            // Save the commitment to the total spent voice credits for the next batch
+            self.current_spent_voice_credits_commitment = _new_spent_voice_credits_commitment;
+
+            // Save the commitment to the per voice credit spent voice credits for the next batch
+            self.current_per_vo_spent_voice_credits_commitment =
+                _new_per_vo_spent_voice_credits_commitment;
+
+            // Save the total votes
+            self.total_votes = _total_votes;
+
+            // Increment the batch #
+            self.current_qvt_batch_num += 1;
+            Ok(())
+        }
+        fn qvt_verifier_verify_proof(
+            &self,
+            a: [[u8; 32]; 2],
+            b: [[[u8; 32]; 2]; 2],
+            c: [[u8; 32]; 2],
+            input: [[u8; 32]; 10],
+        ) -> bool {
+            true
+        }
+        /*
+         * Reset the storage variables which change during message processing and
+         * vote tallying. Does not affect any signups or messages. This is useful
+         * if the client-side process/tally code has a bug that causes an invalid
+         * state transition.
+         */
+        fn coordinator_reset(&mut self) -> Result<()> {
+            ensure!(
+                self.env().caller() == self.coordinator_address,
+                Error::OnlyCoordinator
+            );
+            let message_batch_size = self.message_batch_size as u128;
+            self.has_unprocessed_messages = true;
+            self.state_root = self.state_root_before_processing;
+            self.current_message_batch_index = if self.num_messages % message_batch_size == 0 {
+                self.num_messages - message_batch_size
+            } else {
+                (self.num_messages / message_batch_size) * message_batch_size
+            };
+            self.current_qvt_batch_num = 0;
+
+            self.current_results_commitment = self.original_current_results_commitment;
+            self.current_spent_voice_credits_commitment =
+                self.original_spent_voice_credits_commitment;
+            self.current_per_vo_spent_voice_credits_commitment =
+                self.original_current_results_commitment;
+
+            self.total_votes = 0;
+            Ok(())
+        }
+
+        /*
+         * Verify the result of the vote tally using a Merkle proof and the salt.
+         */
+        fn verify_tally_result(
+            &self,
+            _depth: u8,
+            _index: u128,
+            _leaf: [u8; 32],
+            _path_elements: Vec<Vec<[u8; 32]>>,
+            _salt: [u8; 32],
+        ) -> bool {
+            let computed_root =
+                VerifyTally::compute_merkle_root_from_path(_depth, _index, _leaf, _path_elements);
+
+            self.current_results_commitment == Hasher::hash_left_right(computed_root, _salt)
+        }
+
+        /*
+         * Verify the number of voice credits spent for a particular vote option
+         * using a Merkle proof and the salt.
+         */
+        fn verify_per_vo_spent_voice_credits(
+            &self,
+            _depth: u8,
+            _index: u128,
+            _leaf: [u8; 32],
+            _path_elements: Vec<Vec<[u8; 32]>>,
+            _salt: [u8; 32],
+        ) -> bool {
+            let computed_root =
+                VerifyTally::compute_merkle_root_from_path(_depth, _index, _leaf, _path_elements);
+
+            self.current_per_vo_spent_voice_credits_commitment
+                == Hasher::hash_left_right(computed_root, _salt)
+        }
+
+        /*
+         * Verify the total number of spent voice credits.
+         * @param _spent The value to verify
+         * @param _salt The salt which is hashed with the value to generate the
+         *              commitment to the spent voice credits.
+         */
+        fn verify_spent_voice_credits(&self, _spent: [u8; 32], _salt: [u8; 32]) -> bool {
+            self.current_spent_voice_credits_commitment == Hasher::hash_left_right(_spent, _salt)
+        }
+
         fn calc_empty_vote_option_tree_root(levels: u8) -> [u8; 32] {
             ComputeRoot::compute_empty_quin_root(levels, [0u8; 32])
+        }
+
+        fn get_message_tree_root(&self) -> [u8; 32] {
+            self.message_tree.get_last_root()
+        }
+
+        fn get_state_tree_root(&self) -> [u8; 32] {
+            self.state_tree.get_last_root()
+        }
+        /// A message that can be called on instantiated contracts.
+        /// This one flips the value of the stored `bool` from `true`
+        /// to `false` and vice versa.
+        #[ink(message)]
+        pub fn flip(&mut self) {
+            // self.value = !self.value;
+        }
+
+        /// Simply returns the current value of our `bool`.
+        #[ink(message)]
+        pub fn get(&self) -> [u8; 32] {
+            PoseidonT3::poseidon([[0u8; 32]; 2])
         }
     }
 
