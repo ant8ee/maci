@@ -322,7 +322,8 @@ mod maci {
         /*
          * Returns the deadline to sign up.
          */
-        fn calc_sign_up_deadline(&self) -> u128 {
+        #[ink(message)]
+        pub fn calc_sign_up_deadline(&self) -> u128 {
             self.sign_up_timestamp + self.sign_up_duration_seconds
         }
 
@@ -357,7 +358,8 @@ mod maci {
         /*
          * Returns the deadline to vote
          */
-        fn calc_voting_deadline(&self) -> u128 {
+        #[ink(message)]
+        pub fn calc_voting_deadline(&self) -> u128 {
             self.calc_sign_up_deadline() + self.voting_duration_seconds
         }
 
@@ -400,7 +402,8 @@ mod maci {
          *     Sign_up_token_gatekeeper requires this value to be the ABI-encoded
          *     token ID.
          */
-        fn sign_up(
+        #[ink(message)]
+        pub fn sign_up(
             &mut self,
             _user_pub_key: PubKey,
             _sign_up_gatekeeper_data: Vec<u8>,
@@ -463,10 +466,16 @@ mod maci {
             });
             Ok(())
         }
-        fn sign_up_gatekeeper_register(&mut self, user: AccountId, data: Vec<u8>) -> Result<()> {
+        #[ink(message)]
+        pub fn sign_up_gatekeeper_register(
+            &mut self,
+            user: AccountId,
+            data: Vec<u8>,
+        ) -> Result<()> {
             Ok(())
         }
-        fn initial_voice_credit_proxy_get_voice_credits(
+        #[ink(message)]
+        pub fn initial_voice_credit_proxy_get_voice_credits(
             &mut self,
             user: AccountId,
             data: Vec<u8>,
@@ -481,7 +490,8 @@ mod maci {
          *     coordinator's private key to generate an ECDH shared key which which was
          *     used to encrypt the message.
          */
-        fn publish_message(&mut self, _message: Message, _enc_pub_key: PubKey) -> Result<()> {
+        #[ink(message)]
+        pub fn publish_message(&mut self, _message: Message, _enc_pub_key: PubKey) -> Result<()> {
             self.is_before_voting_deadline()?;
             if self.sign_up_duration_seconds == 0 {
                 ensure!(
@@ -517,7 +527,8 @@ mod maci {
          * A helper fn to convert an array of 8 uint256 values into the a, b,
          * and c array values that the zk-SNARK verifier's verify_proof accepts.
          */
-        fn unpack_proof(
+        #[ink(message)]
+        pub fn unpack_proof(
             &self,
             _proof: [[u8; 32]; 8],
         ) -> ([[u8; 32]; 2], [[[u8; 32]; 2]; 2], [[u8; 32]; 2]) {
@@ -535,7 +546,8 @@ mod maci {
          * @param _ecdh_pub_keys The public key used to generated the ECDH shared key
          *                     to decrypt the message
          */
-        fn gen_batch_ust_public_signals(
+        #[ink(message)]
+        pub fn gen_batch_ust_public_signals(
             &self,
             _new_state_root: [u8; 32],
             _ecdh_pub_keys: Vec<PubKey>,
@@ -577,7 +589,8 @@ mod maci {
          *                     to decrypt the message
          * @param _proof The zk-SNARK proof
          */
-        fn batch_process_message(
+        #[ink(message)]
+        pub fn batch_process_message(
             &mut self,
             _new_state_root: [u8; 32],
             _ecdh_pub_keys: Vec<PubKey>,
@@ -637,7 +650,8 @@ mod maci {
             }
             Ok(())
         }
-        fn batch_ust_verifier_verify_proof(
+        #[ink(message)]
+        pub fn batch_ust_verifier_verify_proof(
             &self,
             a: [[u8; 32]; 2],
             b: [[[u8; 32]; 2]; 2],
@@ -650,7 +664,8 @@ mod maci {
          * Returns the public signals required to verify a quadratic vote tally
          * snark.
          */
-        fn gen_qvt_public_signals(
+        #[ink(message)]
+        pub fn gen_qvt_public_signals(
             &self,
             _intermediate_state_root: [u8; 32],
             _new_results_commitment: [u8; 32],
@@ -673,7 +688,6 @@ mod maci {
                 self.current_per_vo_spent_voice_credits_commitment,
             ]
         }
-
         fn hashed_blank_state_leaf(empty_vote_option_tree_root: [u8; 32]) -> [u8; 32] {
             // The pubkey is the first Pedersen base point from iden3's circomlib
             let state_leaf = StateLeaf {
@@ -688,8 +702,8 @@ mod maci {
 
             DomainObjs::hash_state_leaf(&state_leaf)
         }
-
-        fn has_untallied_state_leaves(&self) -> bool {
+        #[ink(message)]
+        pub fn has_untallied_state_leaves(&self) -> bool {
             self.current_qvt_batch_num < (1 + (self.num_sign_ups / self.tally_batch_size as u128))
         }
 
@@ -701,7 +715,8 @@ mod maci {
          *     (cumulative)
          * @param _proof The zk-SNARK proof
          */
-        fn prove_vote_tally_batch(
+        #[ink(message)]
+        pub fn prove_vote_tally_batch(
             &mut self,
             _intermediate_state_root: [u8; 32],
             _new_results_commitment: [u8; 32],
@@ -764,7 +779,8 @@ mod maci {
             self.current_qvt_batch_num += 1;
             Ok(())
         }
-        fn qvt_verifier_verify_proof(
+        #[ink(message)]
+        pub fn qvt_verifier_verify_proof(
             &self,
             a: [[u8; 32]; 2],
             b: [[[u8; 32]; 2]; 2],
@@ -779,7 +795,8 @@ mod maci {
          * if the client-side process/tally code has a bug that causes an invalid
          * state transition.
          */
-        fn coordinator_reset(&mut self) -> Result<()> {
+        #[ink(message)]
+        pub fn coordinator_reset(&mut self) -> Result<()> {
             ensure!(
                 self.env().caller() == self.coordinator_address,
                 Error::OnlyCoordinator
@@ -807,7 +824,8 @@ mod maci {
         /*
          * Verify the result of the vote tally using a Merkle proof and the salt.
          */
-        fn verify_tally_result(
+        #[ink(message)]
+        pub fn verify_tally_result(
             &self,
             _depth: u8,
             _index: u128,
@@ -825,7 +843,8 @@ mod maci {
          * Verify the number of voice credits spent for a particular vote option
          * using a Merkle proof and the salt.
          */
-        fn verify_per_vo_spent_voice_credits(
+        #[ink(message)]
+        pub fn verify_per_vo_spent_voice_credits(
             &self,
             _depth: u8,
             _index: u128,
@@ -846,33 +865,20 @@ mod maci {
          * @param _salt The salt which is hashed with the value to generate the
          *              commitment to the spent voice credits.
          */
-        fn verify_spent_voice_credits(&self, _spent: [u8; 32], _salt: [u8; 32]) -> bool {
+        #[ink(message)]
+        pub fn verify_spent_voice_credits(&self, _spent: [u8; 32], _salt: [u8; 32]) -> bool {
             self.current_spent_voice_credits_commitment == Hasher::hash_left_right(_spent, _salt)
         }
-
         fn calc_empty_vote_option_tree_root(levels: u8) -> [u8; 32] {
             ComputeRoot::compute_empty_quin_root(levels, [0u8; 32])
         }
-
-        fn get_message_tree_root(&self) -> [u8; 32] {
+        #[ink(message)]
+        pub fn get_message_tree_root(&self) -> [u8; 32] {
             self.message_tree.get_last_root()
         }
-
-        fn get_state_tree_root(&self) -> [u8; 32] {
+        #[ink(message)]
+        pub fn get_state_tree_root(&self) -> [u8; 32] {
             self.state_tree.get_last_root()
-        }
-        /// A message that can be called on instantiated contracts.
-        /// This one flips the value of the stored `bool` from `true`
-        /// to `false` and vice versa.
-        #[ink(message)]
-        pub fn flip(&mut self) {
-            // self.value = !self.value;
-        }
-
-        /// Simply returns the current value of our `bool`.
-        #[ink(message)]
-        pub fn get(&self) -> [u8; 32] {
-            PoseidonT3::poseidon([[0u8; 32]; 2])
         }
     }
 
@@ -887,20 +893,10 @@ mod maci {
         /// Imports `ink_lang` so we can use `#[ink::test]`.
         use ink_lang as ink;
 
-        /// We test if the default constructor does its job.
-        #[ink::test]
-        fn default_works() {
-            let maci = Maci::default();
-            assert_eq!(maci.get(), [0u8; 32]);
-        }
-
         /// We test a simple use case of our contract.
         #[ink::test]
         fn it_works() {
             let mut maci = Maci::new(false);
-            assert_eq!(maci.get(), [0u8; 32]);
-            maci.flip();
-            assert_eq!(maci.get(), [0u8; 32]);
         }
     }
 }

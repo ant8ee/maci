@@ -17,8 +17,7 @@ scale-info = { version = "2", default-features = false, features = ["derive"], o
 substrate-bn = { version = "0.6.0" }
 hex-literal = "0.3.4"
 
-[profile.release]
-overflow-checks = false
+
 [lib]
 name = "quad_vote_tally_verifier"
 path = "lib.rs"
@@ -38,3 +37,5 @@ std = [
     "scale-info/std",
 ]
 ink-as-dependency = []
+[profile.release]
+overflow-checks = false

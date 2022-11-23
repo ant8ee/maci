@@ -38,3 +38,5 @@ std = [
     "dusk-bls12_381/std",
 ]
 ink-as-dependency = []
+[profile.release]
+overflow-checks = false
