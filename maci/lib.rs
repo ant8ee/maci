@@ -3,6 +3,8 @@
 use ink_lang as ink;
 mod library;
 mod tree;
+pub use crate::tree::quin_merkle_tree::QuinMerkleTree;
+
 macro_rules! ensure {
     ( $condition:expr, $error:expr $(,)? ) => {{
         if !$condition {
@@ -23,6 +25,7 @@ mod maci {
     use crate::tree::merkle_tree::{
         MerkleTree, MerkleTreeError, DEFAULT_ROOT_HISTORY_SIZE, MAX_DEPTH,
     };
+    // use crate::tree::quin_merkle_tree::QuinMerkleTree;
     use hex_literal::hex;
     use ink_prelude::{vec, vec::Vec};
     use ink_storage::{
@@ -31,8 +34,137 @@ mod maci {
     };
 
     type PoseidonHash = [u8; 32];
-    const SNARK_SCALAR_FIELD: [u8; 32] =
-        hex!("30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001");
+    pub const SNARK_SCALAR_FIELD: &[u8] =
+        b"30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001";
+    const ZERO_VALUE: &[u8] =
+        b"8370432830353022751713833565135785980866757267633941821328460903436894336785";
+
+    #[derive(
+        Default, PartialEq, scale::Decode, PackedLayout, SpreadLayout, SpreadAllocate, scale::Encode,
+    )]
+    #[cfg_attr(feature = "std", derive(ink_storage::traits::StorageLayout))]
+    pub struct MultiMerkleTree {
+        small_message_tree: Option<QuinMerkleTree<11, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>>,
+        medium_message_tree: Option<QuinMerkleTree<13, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>>,
+        large_message_tree: Option<QuinMerkleTree<15, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>>,
+        l32_message_tree: Option<QuinMerkleTree<32, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>>,
+        test_message_tree: Option<QuinMerkleTree<4, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>>,
+        small_state_tree: Option<MerkleTree<8, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>>,
+        medium_state_tree: Option<MerkleTree<9, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>>,
+        large_state_tree: Option<MerkleTree<12, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>>,
+        l32_state_tree: Option<MerkleTree<32, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>>,
+        test_state_tree: Option<MerkleTree<4, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>>,
+        tree_depth: u8,
+    }
+    impl MultiMerkleTree {
+        fn new(state_tree_depth: u8, zero_value: [u8; 32]) -> Self {
+            let mut tree = Self::default();
+            tree.tree_depth = state_tree_depth;
+            match state_tree_depth {
+                1..=4 => {
+                    tree.test_message_tree = Some(
+                        QuinMerkleTree::<4, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new(zero_value)
+                            .unwrap(),
+                    );
+                    tree.test_state_tree =
+                        Some(MerkleTree::<4, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new().unwrap());
+                }
+                5..=11 => {
+                    tree.small_message_tree = Some(
+                        QuinMerkleTree::<11, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new(zero_value)
+                            .unwrap(),
+                    );
+                    tree.small_state_tree =
+                        Some(MerkleTree::<8, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new().unwrap());
+                }
+                12..=13 => {
+                    tree.medium_message_tree = Some(
+                        QuinMerkleTree::<13, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new(zero_value)
+                            .unwrap(),
+                    );
+                    tree.medium_state_tree =
+                        Some(MerkleTree::<9, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new().unwrap());
+                }
+                14..=15 => {
+                    tree.large_message_tree = Some(
+                        QuinMerkleTree::<15, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new(zero_value)
+                            .unwrap(),
+                    );
+                    tree.large_state_tree =
+                        Some(MerkleTree::<12, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new().unwrap());
+                }
+                _ => {
+                    tree.l32_message_tree = Some(
+                        QuinMerkleTree::<32, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new(zero_value)
+                            .unwrap(),
+                    );
+                    tree.l32_state_tree =
+                        Some(MerkleTree::<32, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new().unwrap());
+                }
+            }
+            tree
+        }
+
+        fn insert_message(&mut self, leaf: [u8; 32]) {
+            match self.tree_depth {
+                1..=4 => {
+                    self.test_message_tree.as_mut().unwrap().insert(leaf);
+                }
+                5..=11 => {
+                    self.small_message_tree.as_mut().unwrap().insert(leaf);
+                }
+                12..=13 => {
+                    self.medium_message_tree.as_mut().unwrap().insert(leaf);
+                }
+                14..=15 => {
+                    self.large_message_tree.as_mut().unwrap().insert(leaf);
+                }
+                _ => {
+                    self.l32_message_tree.as_mut().unwrap().insert(leaf);
+                }
+            }
+        }
+
+        fn insert_state(&mut self, leaf: [u8; 32]) {
+            match self.tree_depth {
+                1..=4 => {
+                    self.test_state_tree.as_mut().unwrap().insert(leaf);
+                }
+                5..=11 => {
+                    self.small_state_tree.as_mut().unwrap().insert(leaf);
+                }
+                12..=13 => {
+                    self.medium_state_tree.as_mut().unwrap().insert(leaf);
+                }
+                14..=15 => {
+                    self.large_state_tree.as_mut().unwrap().insert(leaf);
+                }
+                _ => {
+                    self.l32_state_tree.as_mut().unwrap().insert(leaf);
+                }
+            }
+        }
+
+        fn get_last_root_of_message(&self) -> [u8; 32] {
+            match self.tree_depth {
+                1..=4 => self.test_message_tree.as_ref().unwrap().get_last_root(),
+                5..=11 => self.small_message_tree.as_ref().unwrap().get_last_root(),
+                12..=13 => self.medium_message_tree.as_ref().unwrap().get_last_root(),
+                14..=15 => self.large_message_tree.as_ref().unwrap().get_last_root(),
+                _ => self.l32_message_tree.as_ref().unwrap().get_last_root(),
+            }
+        }
+
+        fn get_last_root_of_state(&self) -> [u8; 32] {
+            match self.tree_depth {
+                1..=4 => self.test_state_tree.as_ref().unwrap().get_last_root(),
+                5..=11 => self.small_state_tree.as_ref().unwrap().get_last_root(),
+                12..=13 => self.medium_state_tree.as_ref().unwrap().get_last_root(),
+                14..=15 => self.large_state_tree.as_ref().unwrap().get_last_root(),
+                _ => self.l32_state_tree.as_ref().unwrap().get_last_root(),
+            }
+        }
+    }
     #[derive(scale::Decode, scale::Encode)]
     #[cfg_attr(
         feature = "std",
@@ -121,10 +253,8 @@ mod maci {
         tally_batch_size: u8,
 
         // The tree that tracks the sign-up messages.
-        message_tree: MerkleTree<MAX_DEPTH, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>,
-
         // The tree that tracks each user's public key and votes
-        state_tree: MerkleTree<MAX_DEPTH, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>,
+        multi_tree: MultiMerkleTree,
 
         original_spent_voice_credits_commitment: [u8; 32],
         original_current_results_commitment: [u8; 32],
@@ -286,8 +416,10 @@ mod maci {
                 // This allows the snark to do a no-op if the user votes for an option
                 // which has no meaning attached to it
                 se1f.vote_options_max_leaf_index = max_values[2];
-                se1f.message_tree =
-                    MerkleTree::<MAX_DEPTH, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new().unwrap();
+                let mut result: [u8; 32] = Default::default();
+                use ink_env::hash::CryptoHash;
+                ink_env::hash::Blake2x256::hash(ZERO_VALUE, &mut result);
+                se1f.multi_tree = MultiMerkleTree::new(tree_depths[0], result);
                 // Calculate and store the empty vote option tree root. This value must
                 // be set before we call hashedBlankStateLeaf() later
                 se1f.empty_vote_option_tree_root =
@@ -311,11 +443,9 @@ mod maci {
                 let h = Self::hashed_blank_state_leaf(se1f.empty_vote_option_tree_root);
 
                 // Create the state tree
-                se1f.state_tree =
-                    MerkleTree::<MAX_DEPTH, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new().unwrap();
                 // Make subsequent insertions start from leaf #1, as leaf #0 is only
                 // updated with random data if a command is invalid.
-                se1f.state_tree.insert(h);
+                se1f.multi_tree.insert_state(h);
             })
         }
 
@@ -450,7 +580,7 @@ mod maci {
             let hashed_leaf = DomainObjs::hash_state_leaf(&state_leaf);
 
             // Insert the leaf
-            self.state_tree.insert(hashed_leaf);
+            self.multi_tree.insert_state(hashed_leaf);
 
             // Update a copy of the state tree root
             self.state_root = self.get_state_tree_root();
@@ -509,7 +639,7 @@ mod maci {
             let leaf = DomainObjs::hash_message(&_message);
 
             // Insert the new leaf into the message tree
-            self.message_tree.insert(leaf);
+            self.multi_tree.insert_message(leaf);
 
             self.current_message_batch_index = (self.num_messages
                 / self.message_batch_size as u128)
@@ -566,7 +696,7 @@ mod maci {
             public_signals[1] = self.coordinator_pub_key.x;
             public_signals[2] = self.coordinator_pub_key.y;
             public_signals[3] = Hasher::u128_to_bytes(self.vote_options_max_leaf_index);
-            public_signals[4] = self.message_tree.get_last_root();
+            public_signals[4] = self.multi_tree.get_last_root_of_message();
             public_signals[5] = Hasher::u128_to_bytes(self.current_message_batch_index);
             public_signals[6] = Hasher::u128_to_bytes(message_batch_end_index);
             public_signals[7] = Hasher::u128_to_bytes(self.num_sign_ups);
@@ -621,7 +751,7 @@ mod maci {
             // TODO: this check is already performed in the verifier contract
             for public_signal in &public_signals {
                 ensure!(
-                    public_signal < &SNARK_SCALAR_FIELD,
+                    public_signal < SNARK_SCALAR_FIELD.try_into().unwrap(),
                     Error::PublicSignalTooLarge
                 );
             }
@@ -749,7 +879,7 @@ mod maci {
             // TODO: consider having more granular revert reasons
             for public_signal in &public_signals {
                 ensure!(
-                    public_signal < &SNARK_SCALAR_FIELD,
+                    public_signal < SNARK_SCALAR_FIELD.try_into().unwrap(),
                     Error::PublicSignalTooLarge
                 );
             }
@@ -874,11 +1004,11 @@ mod maci {
         }
         #[ink(message)]
         pub fn get_message_tree_root(&self) -> [u8; 32] {
-            self.message_tree.get_last_root()
+            self.multi_tree.get_last_root_of_message()
         }
         #[ink(message)]
         pub fn get_state_tree_root(&self) -> [u8; 32] {
-            self.state_tree.get_last_root()
+            self.multi_tree.get_last_root_of_state()
         }
     }
 

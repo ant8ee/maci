@@ -8,12 +8,12 @@ use ink_storage::traits::{PackedLayout, SpreadAllocate, SpreadLayout};
 pub const MAX_DEPTH: usize = 32;
 
 /// The number of leaves per node
-pub const LEAVES_PER_NODE:usize = 5;
+pub const LEAVES_PER_NODE: usize = 5;
 
 ///Merkle tree with history for storing commitments in it
 #[derive(scale::Encode, scale::Decode, PackedLayout, SpreadLayout, SpreadAllocate, PartialEq)]
-#[cfg_attr(feature = "std", derive(Debug, StorageLayout))]
-pub(crate) struct QuinMerkleTree<
+#[cfg_attr(feature = "std", derive(StorageLayout))]
+pub struct QuinMerkleTree<
     const DEPTH: usize,
     const ROOT_HISTORY_SIZE: usize,
     Hash: MerkleTreeHasher,
@@ -23,16 +23,18 @@ pub(crate) struct QuinMerkleTree<
     /// Next leaf index
     pub next_index: u64,
     ///Hashes last filled subtrees on every level
-    pub filled_subtrees: Array<[Hash::Output;LEAVES_PER_NODE], DEPTH>,
+    pub filled_subtrees: Array<[Hash::Output; LEAVES_PER_NODE], DEPTH>,
     /// Merkle tree roots history
     pub roots: Array<Hash::Output, ROOT_HISTORY_SIZE>,
+    /// Merkle tree zeros
+    pub zeros: Array<Hash::Output, DEPTH>,
 }
 
 impl<const DEPTH: usize, const ROOT_HISTORY_SIZE: usize, Hash: MerkleTreeHasher>
     QuinMerkleTree<DEPTH, ROOT_HISTORY_SIZE, Hash>
 {
     ///Create merkle tree
-    pub fn new() -> Result<Self, MerkleTreeError> {
+    pub fn new(zero_value: Hash::Output) -> Result<Self, MerkleTreeError> {
         if DEPTH > MAX_DEPTH {
             return Err(MerkleTreeError::DepthTooLong);
         }
@@ -40,17 +42,26 @@ impl<const DEPTH: usize, const ROOT_HISTORY_SIZE: usize, Hash: MerkleTreeHasher>
         if DEPTH == 0 {
             return Err(MerkleTreeError::DepthIsZero);
         }
+        let mut current_zero = zero_value;
+        let mut zeros = Array([zero_value; DEPTH]);
+        for i in 0..DEPTH {
+            let temp = [current_zero; LEAVES_PER_NODE];
+            zeros.0[i] = current_zero;
+            current_zero = Hash::hash5(temp);
+        }
 
-        let roots = Array([Hash::ZEROS[DEPTH - 1]; ROOT_HISTORY_SIZE]);
-
-        let mut filled_subtrees: Array<[Hash::Output;LEAVES_PER_NODE], DEPTH> = Default::default();
-        filled_subtrees.0.copy_from_slice(&Hash::ZEROS5[0..DEPTH]);
+        let mut roots = Array([zeros.0[DEPTH - 1]; ROOT_HISTORY_SIZE]);
+        let mut filled_subtrees: Array<[Hash::Output; LEAVES_PER_NODE], DEPTH> = Default::default();
+        for i in 0..DEPTH {
+            filled_subtrees.0[i] = [zeros.0[i]; LEAVES_PER_NODE];
+        }
 
         Ok(Self {
             current_root_index: 0,
             next_index: 0,
             filled_subtrees,
             roots,
+            zeros,
         })
     }
 
@@ -91,14 +102,14 @@ impl<const DEPTH: usize, const ROOT_HISTORY_SIZE: usize, Hash: MerkleTreeHasher>
         let mut current_index = next_index;
         let mut current_hash = leaf;
 
-         // The leaf's relative position within its node
+        // The leaf's relative position within its node
         let mut m = current_index % LEAVES_PER_NODE;
 
         for i in 0..DEPTH {
             // If the leaf is at relative index 0, zero out the level in
             // filledSubtrees
-            if m==0{
-                self.filled_subtrees.0[i] =  Hash::ZEROS5[i];
+            if m == 0 {
+                self.filled_subtrees.0[i] = [Hash::ZEROS[i]; LEAVES_PER_NODE];
             }
             self.filled_subtrees.0[i][m] = current_hash;
             current_hash = Hash::hash5(self.filled_subtrees.0[i]);
@@ -118,7 +129,7 @@ impl<const DEPTH: usize, const ROOT_HISTORY_SIZE: usize, Hash: MerkleTreeHasher>
 
 ///Enum with contain merkle tree errors
 #[derive(Debug, PartialEq)]
-pub(crate) enum MerkleTreeError {
+pub enum MerkleTreeError {
     ///Merkle tree is full
     MerkleTreeIsFull,
     ///Depth should be in range 1..MAX_DEPTH
