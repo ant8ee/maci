@@ -1,6 +1,8 @@
 use ink_prelude::{vec, vec::Vec};
 
-use substrate_bn::{pairing_batch,arith::U256, Fq, Fq2,Fr, Group, Gt, G1 as G1Point, G2 as G2Point};
+use substrate_bn::{
+    arith::U256, pairing_batch, Fq, Fq2, Fr, Group, Gt, G1 as G1Point, G2 as G2Point,
+};
 pub struct VerifyingKey {
     pub alpha1: G1Point,
     pub beta2: G2Point,
@@ -10,9 +12,9 @@ pub struct VerifyingKey {
 }
 
 pub struct Proof {
-   pub  a: G1Point,
-   pub  b: G2Point,
-   pub  c: G1Point,
+    pub a: G1Point,
+    pub b: G2Point,
+    pub c: G1Point,
 }
 
 pub struct Pairing;
@@ -28,7 +30,11 @@ impl Pairing {
         Fq::from_str(&Self::PRIME_Q).unwrap().into_u256()
     }
     pub fn slice_to_g1point(x: &str, y: &str) -> G1Point {
-        G1Point::new(Fq::from_str(&x).unwrap(), Fq::from_str(&y).unwrap(), Fq::one())
+        G1Point::new(
+            Fq::from_str(&x).unwrap(),
+            Fq::from_str(&y).unwrap(),
+            Fq::one(),
+        )
     }
     pub fn slice_to_g2point(x: [&str; 2], y: [&str; 2]) -> G2Point {
         G2Point::new(
@@ -38,12 +44,22 @@ impl Pairing {
         )
     }
     pub fn vec_to_g1point(vec: &Vec<Vec<u8>>) -> G1Point {
-        G1Point::new(Fq::from_slice(&vec[0]).unwrap(), Fq::from_slice(&vec[1]).unwrap(), Fq::one())
+        G1Point::new(
+            Fq::from_slice(&vec[0]).unwrap(),
+            Fq::from_slice(&vec[1]).unwrap(),
+            Fq::one(),
+        )
     }
     pub fn vec_to_g2point(vec: &Vec<Vec<Vec<u8>>>) -> G2Point {
         G2Point::new(
-            Fq2::new(Fq::from_slice(&vec[0][0]).unwrap(), Fq::from_slice(&vec[0][1]).unwrap()),
-            Fq2::new(Fq::from_slice(&vec[1][0]).unwrap(), Fq::from_slice(&vec[1][1]).unwrap()),
+            Fq2::new(
+                Fq::from_slice(&vec[0][0]).unwrap(),
+                Fq::from_slice(&vec[0][1]).unwrap(),
+            ),
+            Fq2::new(
+                Fq::from_slice(&vec[1][0]).unwrap(),
+                Fq::from_slice(&vec[1][1]).unwrap(),
+            ),
             Fq2::one(),
         )
     }

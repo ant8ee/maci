@@ -42,7 +42,7 @@ mod maci {
     #[derive(
         Default, PartialEq, scale::Decode, PackedLayout, SpreadLayout, SpreadAllocate, scale::Encode,
     )]
-    #[cfg_attr(feature = "std", derive(ink_storage::traits::StorageLayout))]
+    #[cfg_attr(feature = "std", derive(Debug, ink_storage::traits::StorageLayout))]
     pub struct MultiMerkleTree {
         small_message_tree: Option<QuinMerkleTree<11, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>>,
         medium_message_tree: Option<QuinMerkleTree<13, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>>,
@@ -56,115 +56,7 @@ mod maci {
         test_state_tree: Option<MerkleTree<4, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>>,
         tree_depth: u8,
     }
-    impl MultiMerkleTree {
-        fn new(state_tree_depth: u8, zero_value: [u8; 32]) -> Self {
-            let mut tree = Self::default();
-            tree.tree_depth = state_tree_depth;
-            match state_tree_depth {
-                1..=4 => {
-                    tree.test_message_tree = Some(
-                        QuinMerkleTree::<4, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new(zero_value)
-                            .unwrap(),
-                    );
-                    tree.test_state_tree =
-                        Some(MerkleTree::<4, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new().unwrap());
-                }
-                5..=11 => {
-                    tree.small_message_tree = Some(
-                        QuinMerkleTree::<11, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new(zero_value)
-                            .unwrap(),
-                    );
-                    tree.small_state_tree =
-                        Some(MerkleTree::<8, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new().unwrap());
-                }
-                12..=13 => {
-                    tree.medium_message_tree = Some(
-                        QuinMerkleTree::<13, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new(zero_value)
-                            .unwrap(),
-                    );
-                    tree.medium_state_tree =
-                        Some(MerkleTree::<9, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new().unwrap());
-                }
-                14..=15 => {
-                    tree.large_message_tree = Some(
-                        QuinMerkleTree::<15, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new(zero_value)
-                            .unwrap(),
-                    );
-                    tree.large_state_tree =
-                        Some(MerkleTree::<12, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new().unwrap());
-                }
-                _ => {
-                    tree.l32_message_tree = Some(
-                        QuinMerkleTree::<32, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new(zero_value)
-                            .unwrap(),
-                    );
-                    tree.l32_state_tree =
-                        Some(MerkleTree::<32, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new().unwrap());
-                }
-            }
-            tree
-        }
 
-        fn insert_message(&mut self, leaf: [u8; 32]) {
-            match self.tree_depth {
-                1..=4 => {
-                    self.test_message_tree.as_mut().unwrap().insert(leaf);
-                }
-                5..=11 => {
-                    self.small_message_tree.as_mut().unwrap().insert(leaf);
-                }
-                12..=13 => {
-                    self.medium_message_tree.as_mut().unwrap().insert(leaf);
-                }
-                14..=15 => {
-                    self.large_message_tree.as_mut().unwrap().insert(leaf);
-                }
-                _ => {
-                    self.l32_message_tree.as_mut().unwrap().insert(leaf);
-                }
-            }
-        }
-
-        fn insert_state(&mut self, leaf: [u8; 32]) {
-            match self.tree_depth {
-                1..=4 => {
-                    self.test_state_tree.as_mut().unwrap().insert(leaf);
-                }
-                5..=11 => {
-                    self.small_state_tree.as_mut().unwrap().insert(leaf);
-                }
-                12..=13 => {
-                    self.medium_state_tree.as_mut().unwrap().insert(leaf);
-                }
-                14..=15 => {
-                    self.large_state_tree.as_mut().unwrap().insert(leaf);
-                }
-                _ => {
-                    self.l32_state_tree.as_mut().unwrap().insert(leaf);
-                }
-            }
-        }
-
-        fn get_last_root_of_message(&self) -> [u8; 32] {
-            match self.tree_depth {
-                1..=4 => self.test_message_tree.as_ref().unwrap().get_last_root(),
-                5..=11 => self.small_message_tree.as_ref().unwrap().get_last_root(),
-                12..=13 => self.medium_message_tree.as_ref().unwrap().get_last_root(),
-                14..=15 => self.large_message_tree.as_ref().unwrap().get_last_root(),
-                _ => self.l32_message_tree.as_ref().unwrap().get_last_root(),
-            }
-        }
-
-        fn get_last_root_of_state(&self) -> [u8; 32] {
-            match self.tree_depth {
-                1..=4 => self.test_state_tree.as_ref().unwrap().get_last_root(),
-                5..=11 => self.small_state_tree.as_ref().unwrap().get_last_root(),
-                12..=13 => self.medium_state_tree.as_ref().unwrap().get_last_root(),
-                14..=15 => self.large_state_tree.as_ref().unwrap().get_last_root(),
-                _ => self.l32_state_tree.as_ref().unwrap().get_last_root(),
-            }
-        }
-    }
     #[derive(scale::Decode, scale::Encode)]
     #[cfg_attr(
         feature = "std",
@@ -596,22 +488,7 @@ mod maci {
             });
             Ok(())
         }
-        #[ink(message)]
-        pub fn sign_up_gatekeeper_register(
-            &mut self,
-            user: AccountId,
-            data: Vec<u8>,
-        ) -> Result<()> {
-            Ok(())
-        }
-        #[ink(message)]
-        pub fn initial_voice_credit_proxy_get_voice_credits(
-            &mut self,
-            user: AccountId,
-            data: Vec<u8>,
-        ) -> Result<Balance> {
-            Ok(Balance::default())
-        }
+
         /*
          * Allows anyone to publish a message (an encrypted command and signature).
          * This fn also inserts it into the message tree.
@@ -780,16 +657,7 @@ mod maci {
             }
             Ok(())
         }
-        #[ink(message)]
-        pub fn batch_ust_verifier_verify_proof(
-            &self,
-            a: [[u8; 32]; 2],
-            b: [[[u8; 32]; 2]; 2],
-            c: [[u8; 32]; 2],
-            input: Vec<[u8; 32]>,
-        ) -> bool {
-            true
-        }
+
         /*
          * Returns the public signals required to verify a quadratic vote tally
          * snark.
@@ -909,16 +777,7 @@ mod maci {
             self.current_qvt_batch_num += 1;
             Ok(())
         }
-        #[ink(message)]
-        pub fn qvt_verifier_verify_proof(
-            &self,
-            a: [[u8; 32]; 2],
-            b: [[[u8; 32]; 2]; 2],
-            c: [[u8; 32]; 2],
-            input: [[u8; 32]; 10],
-        ) -> bool {
-            true
-        }
+
         /*
          * Reset the storage variables which change during message processing and
          * vote tallying. Does not affect any signups or messages. This is useful
@@ -1011,7 +870,266 @@ mod maci {
             self.multi_tree.get_last_root_of_state()
         }
     }
+    #[ink(impl)]
+    impl Maci {
+        #[cfg_attr(test, allow(unused_variables))]
+        fn sign_up_gatekeeper_register(&mut self, user: AccountId, data: Vec<u8>) -> Result<()> {
+            #[cfg(test)]
+            {
+                Ok((
+                    AccountId::from([0x0; 32]),
+                    AccountId::from([0x0; 32]),
+                    AccountId::from([0x0; 32]),
+                    0,
+                    0,
+                ))
+            }
+            #[cfg(not(test))]
+            {
+                use ink_env::call::{build_call, Call, ExecutionInput};
+                let selector: [u8; 4] = ink_lang::selector_bytes!("parameters");
+                let (gas_limit, transferred_value) = (0, 0);
+                build_call::<<Self as ::ink_lang::reflect::ContractEnv>::Env>()
+                    .call_type(
+                        Call::new()
+                            .callee(pool_deployer)
+                            .gas_limit(gas_limit)
+                            .transferred_value(transferred_value),
+                    )
+                    .exec_input(ExecutionInput::new(selector.into()))
+                    .returns::<(AccountId, AccountId, AccountId, u32, i32)>()
+                    .fire()
+                    .map_err(|e| {
+                        ink_env::debug_println!("erc20_balance_of= {:?}", e);
+                        Error::TransactionFailed
+                    })
+            }
+        }
+        #[cfg_attr(test, allow(unused_variables))]
+        fn initial_voice_credit_proxy_get_voice_credits(
+            &mut self,
+            user: AccountId,
+            data: Vec<u8>,
+        ) -> Result<Balance> {
+            #[cfg(test)]
+            {
+                Ok((
+                    AccountId::from([0x0; 32]),
+                    AccountId::from([0x0; 32]),
+                    AccountId::from([0x0; 32]),
+                    0,
+                    0,
+                ))
+            }
+            #[cfg(not(test))]
+            {
+                use ink_env::call::{build_call, Call, ExecutionInput};
+                let selector: [u8; 4] = ink_lang::selector_bytes!("parameters");
+                let (gas_limit, transferred_value) = (0, 0);
+                build_call::<<Self as ::ink_lang::reflect::ContractEnv>::Env>()
+                    .call_type(
+                        Call::new()
+                            .callee(pool_deployer)
+                            .gas_limit(gas_limit)
+                            .transferred_value(transferred_value),
+                    )
+                    .exec_input(ExecutionInput::new(selector.into()))
+                    .returns::<(AccountId, AccountId, AccountId, u32, i32)>()
+                    .fire()
+                    .map_err(|e| {
+                        ink_env::debug_println!("erc20_balance_of= {:?}", e);
+                        Error::TransactionFailed
+                    })
+            }
+        }
+        #[cfg_attr(test, allow(unused_variables))]
+        fn batch_ust_verifier_verify_proof(
+            &self,
+            a: [[u8; 32]; 2],
+            b: [[[u8; 32]; 2]; 2],
+            c: [[u8; 32]; 2],
+            input: Vec<[u8; 32]>,
+        ) -> bool {
+            #[cfg(test)]
+            {
+                Ok((
+                    AccountId::from([0x0; 32]),
+                    AccountId::from([0x0; 32]),
+                    AccountId::from([0x0; 32]),
+                    0,
+                    0,
+                ))
+            }
+            #[cfg(not(test))]
+            {
+                use ink_env::call::{build_call, Call, ExecutionInput};
+                let selector: [u8; 4] = ink_lang::selector_bytes!("parameters");
+                let (gas_limit, transferred_value) = (0, 0);
+                build_call::<<Self as ::ink_lang::reflect::ContractEnv>::Env>()
+                    .call_type(
+                        Call::new()
+                            .callee(pool_deployer)
+                            .gas_limit(gas_limit)
+                            .transferred_value(transferred_value),
+                    )
+                    .exec_input(ExecutionInput::new(selector.into()))
+                    .returns::<(AccountId, AccountId, AccountId, u32, i32)>()
+                    .fire()
+                    .map_err(|e| {
+                        ink_env::debug_println!("erc20_balance_of= {:?}", e);
+                        Error::TransactionFailed
+                    })
+            }
+        }
+        #[cfg_attr(test, allow(unused_variables))]
+        fn qvt_verifier_verify_proof(
+            &self,
+            a: [[u8; 32]; 2],
+            b: [[[u8; 32]; 2]; 2],
+            c: [[u8; 32]; 2],
+            input: Vec<[u8; 32]>,
+        ) -> bool {
+            #[cfg(test)]
+            {
+                Ok((
+                    AccountId::from([0x0; 32]),
+                    AccountId::from([0x0; 32]),
+                    AccountId::from([0x0; 32]),
+                    0,
+                    0,
+                ))
+            }
+            #[cfg(not(test))]
+            {
+                use ink_env::call::{build_call, Call, ExecutionInput};
+                let selector: [u8; 4] = ink_lang::selector_bytes!("parameters");
+                let (gas_limit, transferred_value) = (0, 0);
+                build_call::<<Self as ::ink_lang::reflect::ContractEnv>::Env>()
+                    .call_type(
+                        Call::new()
+                            .callee(pool_deployer)
+                            .gas_limit(gas_limit)
+                            .transferred_value(transferred_value),
+                    )
+                    .exec_input(ExecutionInput::new(selector.into()))
+                    .returns::<(AccountId, AccountId, AccountId, u32, i32)>()
+                    .fire()
+                    .map_err(|e| {
+                        ink_env::debug_println!("erc20_balance_of= {:?}", e);
+                        Error::TransactionFailed
+                    })
+            }
+        }
+    }
+    impl MultiMerkleTree {
+        fn new(state_tree_depth: u8, zero_value: [u8; 32]) -> Self {
+            let mut tree = Self::default();
+            tree.tree_depth = state_tree_depth;
+            match state_tree_depth {
+                1..=4 => {
+                    tree.test_message_tree = Some(
+                        QuinMerkleTree::<4, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new(zero_value)
+                            .unwrap(),
+                    );
+                    tree.test_state_tree =
+                        Some(MerkleTree::<4, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new().unwrap());
+                }
+                5..=11 => {
+                    tree.small_message_tree = Some(
+                        QuinMerkleTree::<11, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new(zero_value)
+                            .unwrap(),
+                    );
+                    tree.small_state_tree =
+                        Some(MerkleTree::<8, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new().unwrap());
+                }
+                12..=13 => {
+                    tree.medium_message_tree = Some(
+                        QuinMerkleTree::<13, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new(zero_value)
+                            .unwrap(),
+                    );
+                    tree.medium_state_tree =
+                        Some(MerkleTree::<9, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new().unwrap());
+                }
+                14..=15 => {
+                    tree.large_message_tree = Some(
+                        QuinMerkleTree::<15, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new(zero_value)
+                            .unwrap(),
+                    );
+                    tree.large_state_tree =
+                        Some(MerkleTree::<12, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new().unwrap());
+                }
+                _ => {
+                    tree.l32_message_tree = Some(
+                        QuinMerkleTree::<32, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new(zero_value)
+                            .unwrap(),
+                    );
+                    tree.l32_state_tree =
+                        Some(MerkleTree::<32, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>::new().unwrap());
+                }
+            }
+            tree
+        }
 
+        fn insert_message(&mut self, leaf: [u8; 32]) {
+            match self.tree_depth {
+                1..=4 => {
+                    self.test_message_tree.as_mut().unwrap().insert(leaf);
+                }
+                5..=11 => {
+                    self.small_message_tree.as_mut().unwrap().insert(leaf);
+                }
+                12..=13 => {
+                    self.medium_message_tree.as_mut().unwrap().insert(leaf);
+                }
+                14..=15 => {
+                    self.large_message_tree.as_mut().unwrap().insert(leaf);
+                }
+                _ => {
+                    self.l32_message_tree.as_mut().unwrap().insert(leaf);
+                }
+            }
+        }
+
+        fn insert_state(&mut self, leaf: [u8; 32]) {
+            match self.tree_depth {
+                1..=4 => {
+                    self.test_state_tree.as_mut().unwrap().insert(leaf);
+                }
+                5..=11 => {
+                    self.small_state_tree.as_mut().unwrap().insert(leaf);
+                }
+                12..=13 => {
+                    self.medium_state_tree.as_mut().unwrap().insert(leaf);
+                }
+                14..=15 => {
+                    self.large_state_tree.as_mut().unwrap().insert(leaf);
+                }
+                _ => {
+                    self.l32_state_tree.as_mut().unwrap().insert(leaf);
+                }
+            }
+        }
+
+        fn get_last_root_of_message(&self) -> [u8; 32] {
+            match self.tree_depth {
+                1..=4 => self.test_message_tree.as_ref().unwrap().get_last_root(),
+                5..=11 => self.small_message_tree.as_ref().unwrap().get_last_root(),
+                12..=13 => self.medium_message_tree.as_ref().unwrap().get_last_root(),
+                14..=15 => self.large_message_tree.as_ref().unwrap().get_last_root(),
+                _ => self.l32_message_tree.as_ref().unwrap().get_last_root(),
+            }
+        }
+
+        fn get_last_root_of_state(&self) -> [u8; 32] {
+            match self.tree_depth {
+                1..=4 => self.test_state_tree.as_ref().unwrap().get_last_root(),
+                5..=11 => self.small_state_tree.as_ref().unwrap().get_last_root(),
+                12..=13 => self.medium_state_tree.as_ref().unwrap().get_last_root(),
+                14..=15 => self.large_state_tree.as_ref().unwrap().get_last_root(),
+                _ => self.l32_state_tree.as_ref().unwrap().get_last_root(),
+            }
+        }
+    }
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
     /// module and test functions are marked with a `#[test]` attribute.
     /// The below code is technically just normal Rust code.
@@ -1026,7 +1144,7 @@ mod maci {
         /// We test a simple use case of our contract.
         #[ink::test]
         fn it_works() {
-            let mut maci = Maci::new(false);
+            // let mut maci = Maci::new(false);
         }
     }
 }

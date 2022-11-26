@@ -1,37 +1,27 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+pub use self::versatile_verifier::{VersatileVerifier, VersatileVerifierRef};
 
 use ink_lang as ink;
 mod library;
 
 #[ink::contract]
-mod quad_vote_tally_verifier {
-use ink_prelude::{vec, vec::Vec};
+mod versatile_verifier {
+    use ink_prelude::{vec, vec::Vec};
 
     use substrate_bn::{Fr, Group, Gt, G1 as G1Point, G2 as G2Point};
 
-    use crate::library::pairing::{Pairing,VerifyingKey,Proof};
+    use crate::library::pairing::{Pairing, Proof, VerifyingKey};
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
     #[ink(storage)]
-    pub struct QuadVoteTallyVerifier {
-        /// Stores a single `bool` value on the storage.
-        value: bool,
-    }
+    pub struct VersatileVerifier {}
 
-    impl QuadVoteTallyVerifier {
+    impl VersatileVerifier {
         /// Constructor that initializes the `bool` value to the given `init_value`.
         #[ink(constructor)]
-        pub fn new(init_value: bool) -> Self {
-            Self { value: init_value }
-        }
-
-        /// Constructor that initializes the `bool` value to `false`.
-        ///
-        /// Constructors can delegate to other constructors.
-        #[ink(constructor)]
-        pub fn default() -> Self {
-            Self::new(Default::default())
+        pub fn new() -> Self {
+            Self {}
         }
 
         /// a message that can be called on instantiated contracts.
@@ -39,7 +29,6 @@ use ink_prelude::{vec, vec::Vec};
         /// to `false` and vice versa.
         #[ink(message)]
         pub fn flip(&mut self) {
-            self.value = !self.value;
             use substrate_bn::{pairing, Fr, Group, G1, G2};
             let alice_sk = Fr::from_str("1").unwrap();
             let bob_sk = Fr::from_str("2").unwrap();
@@ -58,13 +47,7 @@ use ink_prelude::{vec, vec::Vec};
             assert!(alice_ss == bob_ss && bob_ss == carol_ss);
         }
 
-        /// Simply returns the current value of our `bool`.
-        #[ink(message)]
-        pub fn get(&self) -> bool {
-            self.value
-        }
-
-        fn verifyingKey(&self) -> VerifyingKey {
+        fn verifying_key(&self) -> VerifyingKey {
             VerifyingKey{alpha1: Pairing::slice_to_g1point("19546474065062811480934750932324761960328425995057443442951846622755096807549","6722645273586431204046513586046831552590292032969652170082729975180192742691"),
         beta2 : Pairing::slice_to_g2point(["19880658973888877860169244078905727037468368485234088774573285060031615049867", "5342742034565472943840576678292999120313759288049292600085237953155293265312"], ["9029238229418247682657957153881099166452077711714796395013060315851112816247", "10985632196680601749057825417366905505985588145856965021675924916242074707186"]),
         gamma2 : Pairing::slice_to_g2point(["6784380429573154140736156321194855523142094870143858094303508787972024556919", "15144747984057279718554400182071922339774353997477769083933853739326933403989"], ["1576705122432327432730505271150906614082814302464869501424983883452900326617", "9421655938900355160049531052024094357013258938718438607894576986535814846957"]),
@@ -101,14 +84,20 @@ use ink_prelude::{vec, vec::Vec};
                 c: Pairing::vec_to_g1point(&c),
             };
 
-            let vk = self.verifyingKey();
+            let vk = self.verifying_key();
 
             // Compute the linear combination vk_x
             let mut vk_x = G1Point::zero();
 
             // Make sure that proof.a, b, and c are each less than the prime q
-            assert!(proof.a.x().into_u256() < Pairing::prime_q(), "verifier-aX-gte-prime-q");
-            assert!(proof.a.y().into_u256() < Pairing::prime_q(), "verifier-aY-gte-prime-q");
+            assert!(
+                proof.a.x().into_u256() < Pairing::prime_q(),
+                "verifier-aX-gte-prime-q"
+            );
+            assert!(
+                proof.a.y().into_u256() < Pairing::prime_q(),
+                "verifier-aY-gte-prime-q"
+            );
 
             assert!(
                 proof.b.x().real().into_u256() < Pairing::prime_q(),
@@ -128,8 +117,14 @@ use ink_prelude::{vec, vec::Vec};
                 "verifier-bY1-gte-prime-q"
             );
 
-            assert!(proof.c.x().into_u256() < Pairing::prime_q(), "verifier-cX-gte-prime-q");
-            assert!(proof.c.y().into_u256() < Pairing::prime_q(), "verifier-cY-gte-prime-q");
+            assert!(
+                proof.c.x().into_u256() < Pairing::prime_q(),
+                "verifier-cX-gte-prime-q"
+            );
+            assert!(
+                proof.c.y().into_u256() < Pairing::prime_q(),
+                "verifier-cY-gte-prime-q"
+            );
 
             // Make sure that every input is less than the snark scalar field
             //for (uint256 i = 0; i < input.length; i++) {
@@ -146,16 +141,12 @@ use ink_prelude::{vec, vec::Vec};
 
             vk_x = Pairing::plus(vk_x, vk.ic[0]);
 
-            Pairing::pairing(
-                &[(Pairing::negate(proof.a),
-                proof.b),
-                (vk.alpha1,
-                vk.beta2),
-                (vk_x,
-                vk.gamma2),
-                (proof.c,
-                vk.delta2)],
-            )
+            Pairing::pairing(&[
+                (Pairing::negate(proof.a), proof.b),
+                (vk.alpha1, vk.beta2),
+                (vk_x, vk.gamma2),
+                (proof.c, vk.delta2),
+            ])
         }
     }
 
@@ -172,18 +163,10 @@ use ink_prelude::{vec, vec::Vec};
 
         /// We test if the default constructor does its job.
         #[ink::test]
-        fn default_works() {
-            let verify = Verify::default();
-            assert_eq!(verify.get(), false);
-        }
+        fn default_works() {}
 
         /// We test a simple use case of our contract.
         #[ink::test]
-        fn it_works() {
-            let mut verify = Verify::new(false);
-            assert_eq!(verify.get(), false);
-            verify.flip();
-            assert_eq!(verify.get(), true);
-        }
+        fn it_works() {}
     }
 }

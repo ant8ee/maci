@@ -12,7 +12,7 @@ pub const LEAVES_PER_NODE: usize = 5;
 
 ///Merkle tree with history for storing commitments in it
 #[derive(scale::Encode, scale::Decode, PackedLayout, SpreadLayout, SpreadAllocate, PartialEq)]
-#[cfg_attr(feature = "std", derive(StorageLayout))]
+#[cfg_attr(feature = "std", derive(Debug, StorageLayout))]
 pub struct QuinMerkleTree<
     const DEPTH: usize,
     const ROOT_HISTORY_SIZE: usize,
@@ -179,250 +179,250 @@ mod tests {
 
     use super::*;
     const TEST_MAX_DEPTH: usize = 10;
+    const ZERO_VALUE: [u8; 32] = [0u8; 32];
+    #[test]
+    fn test_get_zero_root() {
+        let tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Blake>::new(ZERO_VALUE).unwrap();
+        assert_eq!(tree.get_last_root(), Blake::ZEROS[TEST_MAX_DEPTH - 1]);
 
-    // #[test]
-    // fn test_get_zero_root() {
-    //     let tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Blake>::new().unwrap();
-    //     assert_eq!(tree.get_last_root(), Blake::ZEROS[TEST_MAX_DEPTH - 1]);
+        for i in 0..TEST_MAX_DEPTH {
+            assert_eq!(tree.filled_subtrees.0[i], [Blake::ZEROS[i]; 5]);
+        }
+    }
 
-    //     for i in 0..TEST_MAX_DEPTH {
-    //         assert_eq!(tree.filled_subtrees.0[i], Blake::ZEROS[i]);
-    //     }
-    // }
+    #[test]
+    fn test_insert() {
+        let mut tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Blake>::new(ZERO_VALUE).unwrap();
+        assert_eq!(tree.get_last_root(), Blake::ZEROS[TEST_MAX_DEPTH - 1]);
 
-    // #[test]
-    // fn test_insert() {
-    //     let mut tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Blake>::new().unwrap();
-    //     assert_eq!(tree.get_last_root(), Blake::ZEROS[TEST_MAX_DEPTH - 1]);
+        tree.insert([4; 32]).unwrap();
 
-    //     tree.insert([4; 32]).unwrap();
+        assert!(tree.is_known_root(Blake::ZEROS[TEST_MAX_DEPTH - 1]));
+        assert!(!tree.is_known_root(Blake::ZEROS[4]));
 
-    //     assert!(tree.is_known_root(Blake::ZEROS[TEST_MAX_DEPTH - 1]));
-    //     assert!(!tree.is_known_root(Blake::ZEROS[4]));
+        assert_ne!(tree.get_last_root(), Blake::ZEROS[TEST_MAX_DEPTH - 1]);
+    }
 
-    //     assert_ne!(tree.get_last_root(), Blake::ZEROS[TEST_MAX_DEPTH - 1]);
-    // }
+    #[test]
+    fn test_tree_indexes() {
+        let mut tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Blake>::new(ZERO_VALUE).unwrap();
 
-    // #[test]
-    // fn test_tree_indexes() {
-    //     let mut tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Blake>::new().unwrap();
+        for i in 0..5usize.pow(TEST_MAX_DEPTH as u32) {
+            let index = tree.insert([i as u8; 32]).unwrap();
+            assert_eq!(i, index);
+            assert_eq!(i + 1, tree.next_index as usize);
+        }
+    }
 
-    //     for i in 0..2usize.pow(TEST_MAX_DEPTH as u32) {
-    //         let index = tree.insert([i as u8; 32]).unwrap();
-    //         assert_eq!(i, index);
-    //         assert_eq!(i + 1, tree.next_index as usize);
-    //     }
-    // }
+    #[test]
+    fn test_error_when_tree_is_full() {
+        let mut tree = QuinMerkleTree::<3, 30, Blake>::new(ZERO_VALUE).unwrap();
 
-    // #[test]
-    // fn test_error_when_tree_is_full() {
-    //     let mut tree = QuinMerkleTree::<3, 30, Blake>::new().unwrap();
+        for i in 0..5usize.pow(3) {
+            tree.insert([i as u8 + 1; 32]).unwrap();
+        }
 
-    //     for i in 0..2usize.pow(3) {
-    //         tree.insert([i as u8 + 1; 32]).unwrap();
-    //     }
+        let err = tree.insert([6; 32]);
 
-    //     let err = tree.insert([6; 32]);
+        assert_eq!(err, Err(MerkleTreeError::MerkleTreeIsFull));
+    }
 
-    //     assert_eq!(err, Err(MerkleTreeError::MerkleTreeIsFull));
-    // }
+    #[test]
+    fn test_error_when_tree_depth_too_long() {
+        const MAX_DEPTH_PLUS_1: usize = MAX_DEPTH + 1;
 
-    // #[test]
-    // fn test_error_when_tree_depth_too_long() {
-    //     const MAX_DEPTH_PLUS_1: usize = MAX_DEPTH + 1;
+        let tree = QuinMerkleTree::<MAX_DEPTH_PLUS_1, 30, Blake>::new(ZERO_VALUE);
 
-    //     let tree = QuinMerkleTree::<MAX_DEPTH_PLUS_1, 30, Blake>::new();
+        assert_eq!(tree, Err(MerkleTreeError::DepthTooLong));
+    }
 
-    //     assert_eq!(tree, Err(MerkleTreeError::DepthTooLong));
-    // }
+    #[test]
+    fn test_error_when_tree_depth_is_0() {
+        let tree = QuinMerkleTree::<0, 30, Blake>::new(ZERO_VALUE);
 
-    // #[test]
-    // fn test_error_when_tree_depth_is_0() {
-    //     let tree = QuinMerkleTree::<0, 30, Blake>::new();
+        assert_eq!(tree, Err(MerkleTreeError::DepthIsZero));
+    }
 
-    //     assert_eq!(tree, Err(MerkleTreeError::DepthIsZero));
-    // }
+    #[test]
+    fn test_is_known_root() {
+        let mut tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Blake>::new(ZERO_VALUE).unwrap();
 
-    // #[test]
-    // fn test_is_known_root() {
-    //     let mut tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Blake>::new().unwrap();
+        let mut known_roots = vec![Blake::ZEROS[TEST_MAX_DEPTH - 1]];
 
-    //     let mut known_roots = vec![Blake::ZEROS[TEST_MAX_DEPTH - 1]];
+        for i in 0..6 {
+            tree.insert([i as u8 * 2; 32]).unwrap();
+            let known_root = tree.get_last_root();
 
-    //     for i in 0..6 {
-    //         tree.insert([i as u8 * 2; 32]).unwrap();
-    //         let known_root = tree.get_last_root();
+            known_roots.push(known_root);
+        }
 
-    //         known_roots.push(known_root);
-    //     }
+        for root in &known_roots {
+            assert!(tree.is_known_root(*root));
+        }
+    }
 
-    //     for root in &known_roots {
-    //         assert!(tree.is_known_root(*root));
-    //     }
-    // }
+    #[test]
+    fn test_roots_field() {
+        let mut tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Blake>::new(ZERO_VALUE).unwrap();
 
-    // #[test]
-    // fn test_roots_field() {
-    //     let mut tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Blake>::new().unwrap();
+        let mut roots = vec![Blake::ZEROS[TEST_MAX_DEPTH - 1]; 30];
 
-    //     let mut roots = vec![Blake::ZEROS[TEST_MAX_DEPTH - 1]; 30];
+        for i in 0..TEST_MAX_DEPTH {
+            tree.insert([i as u8 * 3; 32]).unwrap();
+            let root = tree.get_last_root();
+            let index = tree.current_root_index;
 
-    //     for i in 0..TEST_MAX_DEPTH {
-    //         tree.insert([i as u8 * 3; 32]).unwrap();
-    //         let root = tree.get_last_root();
-    //         let index = tree.current_root_index;
+            roots[index as usize] = root;
+        }
 
-    //         roots[index as usize] = root;
-    //     }
+        assert_eq!(&tree.roots.0[..], &roots[..]);
+    }
 
-    //     assert_eq!(&tree.roots.0[..], &roots[..]);
-    // }
+    #[test]
+    fn test_check_tree_zeros_correctness() {
+        let mut tree = QuinMerkleTree::<TEST_MAX_DEPTH, 3, Blake>::new(ZERO_VALUE).unwrap();
+        for _i in 0..2u64.pow(TEST_MAX_DEPTH as u32) {
+            tree.insert(Blake::ZEROS[0]).unwrap();
+        }
 
-    // #[test]
-    // fn test_check_tree_zeros_correctness() {
-    //     let mut tree = QuinMerkleTree::<TEST_MAX_DEPTH, 3, Blake>::new().unwrap();
-    //     for _i in 0..2u64.pow(TEST_MAX_DEPTH as u32) {
-    //         tree.insert(Blake::ZEROS[0]).unwrap();
-    //     }
+        for i in 0..TEST_MAX_DEPTH {
+            assert_eq!(tree.filled_subtrees.0[i], [Blake::ZEROS[i]; 5]);
+        }
+    }
 
-    //     for i in 0..TEST_MAX_DEPTH {
-    //         assert_eq!(tree.filled_subtrees.0[i], Blake::ZEROS[i]);
-    //     }
-    // }
+    #[test]
+    fn test_check_zeros_correctness() {
+        let mut result: [u8; 32] = Default::default();
+        Blake2x256::hash(b"slushie", &mut result);
 
-    // #[test]
-    // fn test_check_zeros_correctness() {
-    //     let mut result: [u8; 32] = Default::default();
-    //     Blake2x256::hash(b"slushie", &mut result);
+        for i in 0..MAX_DEPTH {
+            assert_eq!(result, Blake::ZEROS[i]);
 
-    //     for i in 0..MAX_DEPTH {
-    //         assert_eq!(result, Blake::ZEROS[i]);
+            Blake2x256::hash(&[result, result].concat(), &mut result);
+        }
+    }
 
-    //         Blake2x256::hash(&[result, result].concat(), &mut result);
-    //     }
-    // }
+    #[test]
+    fn test_get_zero_root_poseidon() {
+        let tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Poseidon>::new(ZERO_VALUE).unwrap();
+        assert_eq!(tree.get_last_root(), Poseidon::ZEROS[TEST_MAX_DEPTH - 1]);
 
-    // #[test]
-    // fn test_get_zero_root_poseidon() {
-    //     let tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Poseidon>::new().unwrap();
-    //     assert_eq!(tree.get_last_root(), Poseidon::ZEROS[TEST_MAX_DEPTH - 1]);
+        for i in 0..TEST_MAX_DEPTH {
+            assert_eq!(tree.filled_subtrees.0[i], [Poseidon::ZEROS[i]; 5]);
+        }
+    }
 
-    //     for i in 0..TEST_MAX_DEPTH {
-    //         assert_eq!(tree.filled_subtrees.0[i], Poseidon::ZEROS[i]);
-    //     }
-    // }
+    #[test]
+    fn test_insert_poseidon() {
+        let mut tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Poseidon>::new(ZERO_VALUE).unwrap();
+        assert_eq!(tree.get_last_root(), Poseidon::ZEROS[TEST_MAX_DEPTH - 1]);
+
+        tree.insert([4; 32]).unwrap();
 
-    // #[test]
-    // fn test_insert_poseidon() {
-    //     let mut tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Poseidon>::new().unwrap();
-    //     assert_eq!(tree.get_last_root(), Poseidon::ZEROS[TEST_MAX_DEPTH - 1]);
-
-    //     tree.insert([4; 32]).unwrap();
+        assert!(tree.is_known_root(Poseidon::ZEROS[TEST_MAX_DEPTH - 1]));
+        assert!(!tree.is_known_root(Poseidon::ZEROS[4]));
 
-    //     assert!(tree.is_known_root(Poseidon::ZEROS[TEST_MAX_DEPTH - 1]));
-    //     assert!(!tree.is_known_root(Poseidon::ZEROS[4]));
-
-    //     assert_ne!(tree.get_last_root(), Poseidon::ZEROS[TEST_MAX_DEPTH - 1]);
-    // }
-
-    // #[test]
-    // fn test_tree_indexes_poseidon() {
-    //     let mut tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Poseidon>::new().unwrap();
-
-    //     for i in 0..2usize.pow(TEST_MAX_DEPTH as u32) {
-    //         let index = tree.insert([i as u8; 32]).unwrap();
-    //         assert_eq!(i, index);
-    //         assert_eq!(i + 1, tree.next_index as usize);
-    //     }
-    // }
-
-    // #[test]
-    // fn test_error_when_tree_is_full_poseidon() {
-    //     let mut tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Poseidon>::new().unwrap();
-
-    //     for i in 0..2usize.pow(TEST_MAX_DEPTH as u32) {
-    //         tree.insert([i as u8; 32]).unwrap();
-    //     }
-
-    //     let err = tree.insert([6; 32]);
-
-    //     assert_eq!(err, Err(MerkleTreeError::MerkleTreeIsFull));
-    // }
-
-    // #[test]
-    // fn test_error_when_tree_depth_too_long_poseidon() {
-    //     const MAX_DEPTH_PLUS_1: usize = MAX_DEPTH + 1;
-
-    //     let tree = QuinMerkleTree::<MAX_DEPTH_PLUS_1, 30, Poseidon>::new();
-
-    //     assert_eq!(tree, Err(MerkleTreeError::DepthTooLong));
-    // }
-
-    // #[test]
-    // fn test_error_when_tree_depth_is_0_poseidon() {
-    //     let tree = QuinMerkleTree::<0, 30, Poseidon>::new();
-
-    //     assert_eq!(tree, Err(MerkleTreeError::DepthIsZero));
-    // }
-
-    // #[test]
-    // fn test_is_known_root_poseidon() {
-    //     let mut tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Poseidon>::new().unwrap();
-
-    //     let mut known_roots = vec![Poseidon::ZEROS[TEST_MAX_DEPTH - 1]];
-
-    //     for i in 0..6 {
-    //         tree.insert([i as u8 * 2; 32]).unwrap();
-    //         let known_root = tree.get_last_root();
-
-    //         known_roots.push(known_root);
-    //     }
-
-    //     for root in &known_roots {
-    //         assert!(tree.is_known_root(*root));
-    //     }
-    // }
-
-    // #[test]
-    // fn test_roots_field_poseidon() {
-    //     let mut tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Poseidon>::new().unwrap();
-
-    //     let mut roots = vec![Poseidon::ZEROS[TEST_MAX_DEPTH - 1]; 30];
-
-    //     for i in 0..TEST_MAX_DEPTH {
-    //         tree.insert([i as u8 * 3; 32]).unwrap();
-    //         let root = tree.get_last_root();
-    //         let index = tree.current_root_index;
-
-    //         roots[index as usize] = root;
-    //     }
-
-    //     assert_eq!(&tree.roots.0[..], &roots[..]);
-    // }
-
-    // #[test]
-    // fn test_check_tree_zeros_correctness_poseidon() {
-    //     let mut tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Poseidon>::new().unwrap();
-    //     for _i in 0..2u64.pow(TEST_MAX_DEPTH as u32) {
-    //         tree.insert(Poseidon::ZEROS[0]).unwrap();
-    //     }
-
-    //     for i in 0..TEST_MAX_DEPTH {
-    //         assert_eq!(tree.filled_subtrees.0[i], Poseidon::ZEROS[i]);
-    //     }
-    // }
-
-    // #[test]
-    // fn test_check_zeros_correctness_poseidon() {
-    //     let mut result: [u8; 32] = Default::default();
-    //     Blake2x256::hash(b"slushie", &mut result);
-    //     let result = Poseidon::bytes_to_u64(result);
-
-    //     let mut result = BlsScalar::from_raw(result);
-
-    //     for i in 0..MAX_DEPTH {
-    //         assert_eq!(Poseidon::scalar_to_bytes(result), Poseidon::ZEROS[i]);
-    //         result = dusk_poseidon::sponge::hash(&[result, result]);
-    //     }
-    // }
+        assert_ne!(tree.get_last_root(), Poseidon::ZEROS[TEST_MAX_DEPTH - 1]);
+    }
+
+    #[test]
+    fn test_tree_indexes_poseidon() {
+        let mut tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Poseidon>::new(ZERO_VALUE).unwrap();
+
+        for i in 0..2usize.pow(TEST_MAX_DEPTH as u32) {
+            let index = tree.insert([i as u8; 32]).unwrap();
+            assert_eq!(i, index);
+            assert_eq!(i + 1, tree.next_index as usize);
+        }
+    }
+
+    #[test]
+    fn test_error_when_tree_is_full_poseidon() {
+        let mut tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Poseidon>::new(ZERO_VALUE).unwrap();
+
+        for i in 0..2usize.pow(TEST_MAX_DEPTH as u32) {
+            tree.insert([i as u8; 32]).unwrap();
+        }
+
+        let err = tree.insert([6; 32]);
+
+        assert_eq!(err, Err(MerkleTreeError::MerkleTreeIsFull));
+    }
+
+    #[test]
+    fn test_error_when_tree_depth_too_long_poseidon() {
+        const MAX_DEPTH_PLUS_1: usize = MAX_DEPTH + 1;
+
+        let tree = QuinMerkleTree::<MAX_DEPTH_PLUS_1, 30, Poseidon>::new(ZERO_VALUE);
+
+        assert_eq!(tree, Err(MerkleTreeError::DepthTooLong));
+    }
+
+    #[test]
+    fn test_error_when_tree_depth_is_0_poseidon() {
+        let tree = QuinMerkleTree::<0, 30, Poseidon>::new(ZERO_VALUE);
+
+        assert_eq!(tree, Err(MerkleTreeError::DepthIsZero));
+    }
+
+    #[test]
+    fn test_is_known_root_poseidon() {
+        let mut tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Poseidon>::new(ZERO_VALUE).unwrap();
+
+        let mut known_roots = vec![Poseidon::ZEROS[TEST_MAX_DEPTH - 1]];
+
+        for i in 0..6 {
+            tree.insert([i as u8 * 2; 32]).unwrap();
+            let known_root = tree.get_last_root();
+
+            known_roots.push(known_root);
+        }
+
+        for root in &known_roots {
+            assert!(tree.is_known_root(*root));
+        }
+    }
+
+    #[test]
+    fn test_roots_field_poseidon() {
+        let mut tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Poseidon>::new(ZERO_VALUE).unwrap();
+
+        let mut roots = vec![Poseidon::ZEROS[TEST_MAX_DEPTH - 1]; 30];
+
+        for i in 0..TEST_MAX_DEPTH {
+            tree.insert([i as u8 * 3; 32]).unwrap();
+            let root = tree.get_last_root();
+            let index = tree.current_root_index;
+
+            roots[index as usize] = root;
+        }
+
+        assert_eq!(&tree.roots.0[..], &roots[..]);
+    }
+
+    #[test]
+    fn test_check_tree_zeros_correctness_poseidon() {
+        let mut tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Poseidon>::new(ZERO_VALUE).unwrap();
+        for _i in 0..2u64.pow(TEST_MAX_DEPTH as u32) {
+            tree.insert(Poseidon::ZEROS[0]).unwrap();
+        }
+
+        for i in 0..TEST_MAX_DEPTH {
+            assert_eq!(tree.filled_subtrees.0[i], [Poseidon::ZEROS[i]; 5]);
+        }
+    }
+
+    #[test]
+    fn test_check_zeros_correctness_poseidon() {
+        let mut result: [u8; 32] = Default::default();
+        Blake2x256::hash(b"slushie", &mut result);
+        let result = Poseidon::bytes_to_u64(result);
+
+        let mut result = BlsScalar::from_raw(result);
+
+        for i in 0..MAX_DEPTH {
+            assert_eq!(Poseidon::scalar_to_bytes(result), Poseidon::ZEROS[i]);
+            result = dusk_poseidon::sponge::hash(&[result, result]);
+        }
+    }
 }
