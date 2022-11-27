@@ -50,7 +50,7 @@ impl<const DEPTH: usize, const ROOT_HISTORY_SIZE: usize, Hash: MerkleTreeHasher>
             current_zero = Hash::hash5(temp);
         }
 
-        let mut roots = Array([zeros.0[DEPTH - 1]; ROOT_HISTORY_SIZE]);
+        let roots = Array([zeros.0[DEPTH - 1]; ROOT_HISTORY_SIZE]);
         let mut filled_subtrees: Array<[Hash::Output; LEAVES_PER_NODE], DEPTH> = Default::default();
         for i in 0..DEPTH {
             filled_subtrees.0[i] = [zeros.0[i]; LEAVES_PER_NODE];

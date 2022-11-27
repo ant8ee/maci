@@ -1,7 +1,5 @@
 use super::hasher::Hasher;
 use crate::maci::{Message, StateLeaf};
-use crate::tree::hasher::Poseidon;
-use dusk_bls12_381::BlsScalar;
 use ink_prelude::{vec, vec::Vec};
 pub struct DomainObjs;
 impl DomainObjs {

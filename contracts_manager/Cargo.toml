@@ -1,5 +1,5 @@
 [package]
-name = "contract_manager"
+name = "contracts_manager"
 version = "0.1.0"
 authors = [""]
 edition = "2021"
@@ -23,7 +23,7 @@ signup_token= { version = "4.0.0-alpha.3", path = "../signup_token", default-fea
 versatile_verifier= { version = "0.1.0", path = "../versatile_verifier", default-features = false, features = ["ink-as-dependency"] }
 
 [lib]
-name = "contract_manager"
+name = "contracts_manager"
 path = "lib.rs"
 crate-type = ["cdylib", "rlib"]
 

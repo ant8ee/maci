@@ -69,7 +69,9 @@ mod signup_token_gatekeeper {
             use scale::Decode;
             let token_id = u128::decode(&mut &data[..]).unwrap();
             assert!(
-                self.erc721_owner_of(self.token, token_id as u32).unwrap_or(Some(AccountId::from([0x0;32]))) == Some(user),
+                self.erc721_owner_of(self.token, token_id as u32)
+                    .unwrap_or(Some(AccountId::from([0x0; 32])))
+                    == Some(user),
                 "SignUpTokenGatekeeper: this user does not own the token"
             );
             assert!(

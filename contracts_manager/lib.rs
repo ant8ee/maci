@@ -15,7 +15,7 @@ macro_rules! ensure {
 }
 #[ink::contract]
 pub mod contracts_manager {
-    #[cfg_attr(test, allow(dead_code))]
+    use ink_prelude::vec::Vec;
     use ink_storage::{traits::SpreadAllocate, Mapping};
     use scale::{Decode, Encode};
     #[ink(storage)]
@@ -36,7 +36,7 @@ pub mod contracts_manager {
         constant_initial_voice_credit_proxy_hash: Hash,
         signup_token_hash: Hash,
         versatile_verifier_hash: Hash,
-        endowment_amount:Balance,
+        endowment_amount: Balance,
         version: u32,
         /// The contract owner
         owner: AccountId,
@@ -59,8 +59,8 @@ pub mod contracts_manager {
             // `Mapping`s of our contract.
             ink_lang::utils::initialize_contract(|contract: &mut Self| {
                 contract.owner = Self::env().caller();
-                contract.version=1;
-                contract.endowment_amount=0;
+                contract.version = 1;
+                contract.endowment_amount = 0;
             })
         }
         #[ink(message)]
@@ -115,11 +115,12 @@ pub mod contracts_manager {
                 #[cfg(not(test))]
                 {
                     let salt = self.version.to_le_bytes();
-                    let instance_params = free_for_all_signup_gatekeeper::FreeForAllSignupGatekeeperRef::new()
-                        .endowment(self.endowment_amount)
-                        .code_hash(code_hash)
-                        .salt_bytes(salt)
-                        .params();
+                    let instance_params =
+                        free_for_all_signup_gatekeeper::FreeForAllSignupGatekeeperRef::new()
+                            .endowment(self.endowment_amount)
+                            .code_hash(code_hash)
+                            .salt_bytes(salt)
+                            .params();
                     let init_result = ink_env::instantiate_contract(&instance_params);
                     let contract_addr =
                         init_result.expect("failed at instantiating the `art factory ` contract");
@@ -237,6 +238,11 @@ pub mod contracts_manager {
         pub fn instantiate_versatile_verifier_contract(
             &mut self,
             code_hash: Hash,
+            alpha1: Vec<Vec<u8>>,
+            beta2: Vec<Vec<Vec<u8>>>,
+            gamma2: Vec<Vec<Vec<u8>>>,
+            delta2: Vec<Vec<Vec<u8>>>,
+            ic: Vec<Vec<Vec<u8>>>,
         ) -> Result<AccountId> {
             ensure!(self.env().caller() == self.owner, Error::OnlyOwner);
 
@@ -248,12 +254,13 @@ pub mod contracts_manager {
                 #[cfg(not(test))]
                 {
                     let salt = self.version.to_le_bytes();
-                    let instance_params =
-                        versatile_verifier::VersatileVerifierRef::new()
-                            .endowment(self.endowment_amount)
-                            .code_hash(code_hash)
-                            .salt_bytes(salt)
-                            .params();
+                    let instance_params = versatile_verifier::VersatileVerifierRef::new(
+                        alpha1, beta2, gamma2, delta2, ic,
+                    )
+                    .endowment(self.endowment_amount)
+                    .code_hash(code_hash)
+                    .salt_bytes(salt)
+                    .params();
                     let init_result = ink_env::instantiate_contract(&instance_params);
                     let contract_addr = init_result
                         .expect("failed at instantiating the `versatile_verifier` contract");
@@ -307,11 +314,23 @@ pub mod contracts_manager {
             signup_token_hash: Hash,
             versatile_verifier_hash: Hash,
             balance: Balance,
+            alpha1: Vec<Vec<u8>>,
+            beta2: Vec<Vec<Vec<u8>>>,
+            gamma2: Vec<Vec<Vec<u8>>>,
+            delta2: Vec<Vec<Vec<u8>>>,
+            ic: Vec<Vec<Vec<u8>>>,
         ) -> Result<()> {
             ensure!(self.env().caller() == self.owner, Error::OnlyOwner);
             let token = self.instantiate_signup_token_contract(signup_token_hash)?;
             self.instantiate_signup_token_gatekeeper_contract(signup_token_gatekeeper_hash, token)?;
-            self.instantiate_versatile_verifier_contract(versatile_verifier_hash)?;
+            self.instantiate_versatile_verifier_contract(
+                versatile_verifier_hash,
+                alpha1,
+                beta2,
+                gamma2,
+                delta2,
+                ic,
+            )?;
             self.instantiate_free_for_all_signup_gatekeeper_contract(
                 free_for_all_signup_gatekeeper_hash,
             )?;

@@ -18,22 +18,18 @@ mod maci {
     use super::*;
 
     use crate::library::{
-        computeroot::ComputeRoot, domainobjs::DomainObjs, hasher::Hasher, poseidon::PoseidonT3,
-        verifytally::VerifyTally,
+        computeroot::ComputeRoot, domainobjs::DomainObjs, hasher::Hasher, verifytally::VerifyTally,
     };
     use crate::tree::hasher::Poseidon;
     use crate::tree::merkle_tree::{
         MerkleTree, MerkleTreeError, DEFAULT_ROOT_HISTORY_SIZE, MAX_DEPTH,
     };
-    // use crate::tree::quin_merkle_tree::QuinMerkleTree;
+    use crate::tree::quin_merkle_tree::MerkleTreeError as QuinMerkleTreeError;
     use hex_literal::hex;
     use ink_prelude::{vec, vec::Vec};
-    use ink_storage::{
-        traits::{PackedAllocate, PackedLayout, SpreadAllocate, SpreadLayout},
-        Mapping,
-    };
+    use ink_storage::traits::{PackedLayout, SpreadAllocate, SpreadLayout};
 
-    type PoseidonHash = [u8; 32];
+    // type PoseidonHash = [u8; 32];
     pub const SNARK_SCALAR_FIELD: &[u8] =
         b"30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001";
     const ZERO_VALUE: &[u8] =
@@ -229,6 +225,7 @@ mod maci {
     #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub enum Error {
+        TransactionFailed,
         PublicSignalTooLarge,
         InvalidBatchUstProof,
         InvalidTallyProof,
@@ -248,8 +245,33 @@ mod maci {
         OnlyTheCoordinatorCanSubmitSignupsInDebugMode,
         MaximumNumberOfSignupsReached,
         TooManyVoiceCredits,
+        DepositFailure,
+        MerkleTreeIsFull,
+        MerkleTreeInvalidDepth,
+        InvalidTransferredAmount,
+        InvalidDepositSize,
+        InsufficientFunds,
+        NullifierAlreadyUsed,
+        UnknownRoot,
     }
-
+    impl From<MerkleTreeError> for Error {
+        fn from(err: MerkleTreeError) -> Self {
+            match err {
+                MerkleTreeError::MerkleTreeIsFull => Error::MerkleTreeIsFull,
+                MerkleTreeError::DepthTooLong => Error::MerkleTreeInvalidDepth,
+                MerkleTreeError::DepthIsZero => Error::MerkleTreeInvalidDepth,
+            }
+        }
+    }
+    impl From<QuinMerkleTreeError> for Error {
+        fn from(err: QuinMerkleTreeError) -> Self {
+            match err {
+                QuinMerkleTreeError::MerkleTreeIsFull => Error::MerkleTreeIsFull,
+                QuinMerkleTreeError::DepthTooLong => Error::MerkleTreeInvalidDepth,
+                QuinMerkleTreeError::DepthIsZero => Error::MerkleTreeInvalidDepth,
+            }
+        }
+    }
     pub type Result<T> = core::result::Result<T, Error>;
 
     impl Maci {
@@ -337,7 +359,7 @@ mod maci {
                 // Create the state tree
                 // Make subsequent insertions start from leaf #1, as leaf #0 is only
                 // updated with random data if a command is invalid.
-                se1f.multi_tree.insert_state(h);
+                assert!(se1f.multi_tree.insert_state(h).is_ok());
             })
         }
 
@@ -363,19 +385,19 @@ mod maci {
             Ok(())
         }
 
-        /*
-         * Ensures that the calling fn only continues execution if the
-         * current block time is after or equal to the sign-up deadline.
-         */
-        fn is_after_sign_up_deadline(&self) -> Result<()> {
-            if self.sign_up_duration_seconds != 0 {
-                ensure!(
-                    self.env().block_timestamp() as u128 >= self.calc_sign_up_deadline(),
-                    Error::SignupPeriodNotOver
-                );
-            }
-            Ok(())
-        }
+        // /*
+        //  * Ensures that the calling fn only continues execution if the
+        //  * current block time is after or equal to the sign-up deadline.
+        //  */
+        // fn is_after_sign_up_deadline(&self) -> Result<()> {
+        //     if self.sign_up_duration_seconds != 0 {
+        //         ensure!(
+        //             self.env().block_timestamp() as u128 >= self.calc_sign_up_deadline(),
+        //             Error::SignupPeriodNotOver
+        //         );
+        //     }
+        //     Ok(())
+        // }
 
         /*
          * Returns the deadline to vote
@@ -446,9 +468,14 @@ mod maci {
 
             // Register the user via the sign-up gatekeeper. This fn should
             // throw if the user has already registered or if ineligible to do so.
-            self.sign_up_gatekeeper_register(self.env().caller(), _sign_up_gatekeeper_data)?;
+            self.sign_up_gatekeeper_register(
+                self.sign_up_gatekeeper,
+                self.env().caller(),
+                _sign_up_gatekeeper_data,
+            )?;
 
             let voice_credit_balance = self.initial_voice_credit_proxy_get_voice_credits(
+                self.initial_voice_credit_proxy,
                 self.env().caller(),
                 _initial_voice_credit_proxy_data,
             )?;
@@ -472,7 +499,7 @@ mod maci {
             let hashed_leaf = DomainObjs::hash_state_leaf(&state_leaf);
 
             // Insert the leaf
-            self.multi_tree.insert_state(hashed_leaf);
+            self.multi_tree.insert_state(hashed_leaf)?;
 
             // Update a copy of the state tree root
             self.state_root = self.get_state_tree_root();
@@ -516,7 +543,7 @@ mod maci {
             let leaf = DomainObjs::hash_message(&_message);
 
             // Insert the new leaf into the message tree
-            self.multi_tree.insert_message(leaf);
+            self.multi_tree.insert_message(leaf)?;
 
             self.current_message_batch_index = (self.num_messages
                 / self.message_batch_size as u128)
@@ -638,7 +665,13 @@ mod maci {
 
             // Verify the proof
             ensure!(
-                self.batch_ust_verifier_verify_proof(a, b, c, public_signals),
+                self.batch_ust_verifier_verify_proof(
+                    self.batch_ust_verifier,
+                    a,
+                    b,
+                    c,
+                    public_signals
+                ),
                 Error::InvalidBatchUstProof
             );
 
@@ -670,10 +703,10 @@ mod maci {
             _new_spent_voice_credits_commitment: [u8; 32],
             _new_per_vo_spent_voice_credits_commitment: [u8; 32],
             _total_votes: u128,
-        ) -> [[u8; 32]; 10] {
+        ) -> Vec<[u8; 32]> {
             let current_qvt_batch_num = Hasher::u128_to_bytes(self.current_qvt_batch_num);
             let total_votes = Hasher::u128_to_bytes(_total_votes);
-            [
+            vec![
                 _new_results_commitment,
                 _new_spent_voice_credits_commitment,
                 _new_per_vo_spent_voice_credits_commitment,
@@ -756,7 +789,8 @@ mod maci {
             let (a, b, c) = self.unpack_proof(_proof);
 
             // Verify the proof
-            let is_valid = self.qvt_verifier_verify_proof(a, b, c, public_signals);
+            let is_valid =
+                self.qvt_verifier_verify_proof(self.qvt_verifier, a, b, c, public_signals);
 
             ensure!(is_valid == true, Error::InvalidTallyProof);
 
@@ -873,34 +907,37 @@ mod maci {
     #[ink(impl)]
     impl Maci {
         #[cfg_attr(test, allow(unused_variables))]
-        fn sign_up_gatekeeper_register(&mut self, user: AccountId, data: Vec<u8>) -> Result<()> {
+        fn sign_up_gatekeeper_register(
+            &mut self,
+            contract_address: AccountId,
+            user: AccountId,
+            data: Vec<u8>,
+        ) -> Result<()> {
             #[cfg(test)]
             {
-                Ok((
-                    AccountId::from([0x0; 32]),
-                    AccountId::from([0x0; 32]),
-                    AccountId::from([0x0; 32]),
-                    0,
-                    0,
-                ))
+                Ok(())
             }
             #[cfg(not(test))]
             {
                 use ink_env::call::{build_call, Call, ExecutionInput};
-                let selector: [u8; 4] = ink_lang::selector_bytes!("parameters");
+                let selector: [u8; 4] = ink_lang::selector_bytes!("register");
                 let (gas_limit, transferred_value) = (0, 0);
                 build_call::<<Self as ::ink_lang::reflect::ContractEnv>::Env>()
                     .call_type(
                         Call::new()
-                            .callee(pool_deployer)
+                            .callee(contract_address)
                             .gas_limit(gas_limit)
                             .transferred_value(transferred_value),
                     )
-                    .exec_input(ExecutionInput::new(selector.into()))
-                    .returns::<(AccountId, AccountId, AccountId, u32, i32)>()
+                    .exec_input(
+                        ExecutionInput::new(selector.into())
+                            .push_arg(user)
+                            .push_arg(data),
+                    )
+                    .returns::<()>()
                     .fire()
                     .map_err(|e| {
-                        ink_env::debug_println!("erc20_balance_of= {:?}", e);
+                        ink_env::debug_println!("sign_up_gatekeeper_register= {:?}", e);
                         Error::TransactionFailed
                     })
             }
@@ -908,36 +945,38 @@ mod maci {
         #[cfg_attr(test, allow(unused_variables))]
         fn initial_voice_credit_proxy_get_voice_credits(
             &mut self,
+            contract_address: AccountId,
             user: AccountId,
             data: Vec<u8>,
         ) -> Result<Balance> {
             #[cfg(test)]
             {
-                Ok((
-                    AccountId::from([0x0; 32]),
-                    AccountId::from([0x0; 32]),
-                    AccountId::from([0x0; 32]),
-                    0,
-                    0,
-                ))
+                Ok(0)
             }
             #[cfg(not(test))]
             {
                 use ink_env::call::{build_call, Call, ExecutionInput};
-                let selector: [u8; 4] = ink_lang::selector_bytes!("parameters");
+                let selector: [u8; 4] = ink_lang::selector_bytes!("get_voice_credits");
                 let (gas_limit, transferred_value) = (0, 0);
                 build_call::<<Self as ::ink_lang::reflect::ContractEnv>::Env>()
                     .call_type(
                         Call::new()
-                            .callee(pool_deployer)
+                            .callee(contract_address)
                             .gas_limit(gas_limit)
                             .transferred_value(transferred_value),
                     )
-                    .exec_input(ExecutionInput::new(selector.into()))
-                    .returns::<(AccountId, AccountId, AccountId, u32, i32)>()
+                    .exec_input(
+                        ExecutionInput::new(selector.into())
+                            .push_arg(user)
+                            .push_arg(data),
+                    )
+                    .returns::<Balance>()
                     .fire()
                     .map_err(|e| {
-                        ink_env::debug_println!("erc20_balance_of= {:?}", e);
+                        ink_env::debug_println!(
+                            "initial_voice_credit_proxy_get_voice_credits= {:?}",
+                            e
+                        );
                         Error::TransactionFailed
                     })
             }
@@ -945,6 +984,7 @@ mod maci {
         #[cfg_attr(test, allow(unused_variables))]
         fn batch_ust_verifier_verify_proof(
             &self,
+            contract_address: AccountId,
             a: [[u8; 32]; 2],
             b: [[[u8; 32]; 2]; 2],
             c: [[u8; 32]; 2],
@@ -952,38 +992,40 @@ mod maci {
         ) -> bool {
             #[cfg(test)]
             {
-                Ok((
-                    AccountId::from([0x0; 32]),
-                    AccountId::from([0x0; 32]),
-                    AccountId::from([0x0; 32]),
-                    0,
-                    0,
-                ))
+                true
             }
             #[cfg(not(test))]
             {
                 use ink_env::call::{build_call, Call, ExecutionInput};
-                let selector: [u8; 4] = ink_lang::selector_bytes!("parameters");
+                let selector: [u8; 4] = ink_lang::selector_bytes!("verify_proof");
                 let (gas_limit, transferred_value) = (0, 0);
                 build_call::<<Self as ::ink_lang::reflect::ContractEnv>::Env>()
                     .call_type(
                         Call::new()
-                            .callee(pool_deployer)
+                            .callee(contract_address)
                             .gas_limit(gas_limit)
                             .transferred_value(transferred_value),
                     )
-                    .exec_input(ExecutionInput::new(selector.into()))
-                    .returns::<(AccountId, AccountId, AccountId, u32, i32)>()
+                    .exec_input(
+                        ExecutionInput::new(selector.into())
+                            .push_arg(a)
+                            .push_arg(b)
+                            .push_arg(c)
+                            .push_arg(input),
+                    )
+                    .returns::<bool>()
                     .fire()
                     .map_err(|e| {
-                        ink_env::debug_println!("erc20_balance_of= {:?}", e);
+                        ink_env::debug_println!("batch_ust_verifier_verify_proof= {:?}", e);
                         Error::TransactionFailed
                     })
+                    .unwrap_or(false)
             }
         }
         #[cfg_attr(test, allow(unused_variables))]
         fn qvt_verifier_verify_proof(
             &self,
+            contract_address: AccountId,
             a: [[u8; 32]; 2],
             b: [[[u8; 32]; 2]; 2],
             c: [[u8; 32]; 2],
@@ -991,33 +1033,34 @@ mod maci {
         ) -> bool {
             #[cfg(test)]
             {
-                Ok((
-                    AccountId::from([0x0; 32]),
-                    AccountId::from([0x0; 32]),
-                    AccountId::from([0x0; 32]),
-                    0,
-                    0,
-                ))
+                true
             }
             #[cfg(not(test))]
             {
                 use ink_env::call::{build_call, Call, ExecutionInput};
-                let selector: [u8; 4] = ink_lang::selector_bytes!("parameters");
+                let selector: [u8; 4] = ink_lang::selector_bytes!("verify_proof");
                 let (gas_limit, transferred_value) = (0, 0);
                 build_call::<<Self as ::ink_lang::reflect::ContractEnv>::Env>()
                     .call_type(
                         Call::new()
-                            .callee(pool_deployer)
+                            .callee(contract_address)
                             .gas_limit(gas_limit)
                             .transferred_value(transferred_value),
                     )
-                    .exec_input(ExecutionInput::new(selector.into()))
-                    .returns::<(AccountId, AccountId, AccountId, u32, i32)>()
+                    .exec_input(
+                        ExecutionInput::new(selector.into())
+                            .push_arg(a)
+                            .push_arg(b)
+                            .push_arg(c)
+                            .push_arg(input),
+                    )
+                    .returns::<bool>()
                     .fire()
                     .map_err(|e| {
-                        ink_env::debug_println!("erc20_balance_of= {:?}", e);
+                        ink_env::debug_println!("qvt_verifier_verify_proof= {:?}", e);
                         Error::TransactionFailed
                     })
+                    .unwrap_or(false)
             }
         }
     }
@@ -1070,44 +1113,26 @@ mod maci {
             tree
         }
 
-        fn insert_message(&mut self, leaf: [u8; 32]) {
+        fn insert_message(&mut self, leaf: [u8; 32]) -> Result<()> {
             match self.tree_depth {
-                1..=4 => {
-                    self.test_message_tree.as_mut().unwrap().insert(leaf);
-                }
-                5..=11 => {
-                    self.small_message_tree.as_mut().unwrap().insert(leaf);
-                }
-                12..=13 => {
-                    self.medium_message_tree.as_mut().unwrap().insert(leaf);
-                }
-                14..=15 => {
-                    self.large_message_tree.as_mut().unwrap().insert(leaf);
-                }
-                _ => {
-                    self.l32_message_tree.as_mut().unwrap().insert(leaf);
-                }
-            }
+                1..=4 => self.test_message_tree.as_mut().unwrap().insert(leaf)?,
+                5..=11 => self.small_message_tree.as_mut().unwrap().insert(leaf)?,
+                12..=13 => self.medium_message_tree.as_mut().unwrap().insert(leaf)?,
+                14..=15 => self.large_message_tree.as_mut().unwrap().insert(leaf)?,
+                _ => self.l32_message_tree.as_mut().unwrap().insert(leaf)?,
+            };
+            Ok(())
         }
 
-        fn insert_state(&mut self, leaf: [u8; 32]) {
+        fn insert_state(&mut self, leaf: [u8; 32]) -> Result<()> {
             match self.tree_depth {
-                1..=4 => {
-                    self.test_state_tree.as_mut().unwrap().insert(leaf);
-                }
-                5..=11 => {
-                    self.small_state_tree.as_mut().unwrap().insert(leaf);
-                }
-                12..=13 => {
-                    self.medium_state_tree.as_mut().unwrap().insert(leaf);
-                }
-                14..=15 => {
-                    self.large_state_tree.as_mut().unwrap().insert(leaf);
-                }
-                _ => {
-                    self.l32_state_tree.as_mut().unwrap().insert(leaf);
-                }
-            }
+                1..=4 => self.test_state_tree.as_mut().unwrap().insert(leaf)?,
+                5..=11 => self.small_state_tree.as_mut().unwrap().insert(leaf)?,
+                12..=13 => self.medium_state_tree.as_mut().unwrap().insert(leaf)?,
+                14..=15 => self.large_state_tree.as_mut().unwrap().insert(leaf)?,
+                _ => self.l32_state_tree.as_mut().unwrap().insert(leaf)?,
+            };
+            Ok(())
         }
 
         fn get_last_root_of_message(&self) -> [u8; 32] {

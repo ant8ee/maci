@@ -1,4 +1,4 @@
-use ink_prelude::{vec, vec::Vec};
+use ink_prelude::vec::Vec;
 
 pub struct VerifyTally;
 use super::hasher::Hasher;
