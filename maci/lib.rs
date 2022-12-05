@@ -1,4 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+pub use self::maci::{Maci, MaciRef};
 
 use ink_lang as ink;
 mod library;
@@ -13,7 +14,7 @@ macro_rules! ensure {
     }};
 }
 #[ink::contract]
-mod maci {
+pub mod maci {
 
     use super::*;
 
@@ -191,7 +192,7 @@ mod maci {
         num_sign_ups: u128,
         num_messages: u128,
 
-        tree_depths: [u8; 3],
+        tree_depths: Vec<u8>,
 
         has_unprocessed_messages: bool,
 
@@ -278,16 +279,16 @@ mod maci {
         /// Constructor that initializes the `bool` value to the given `init_value`.
         #[ink(constructor)]
         pub fn new(
-            tree_depths: [u8; 3],
-            batch_sizes: [u8; 2],
-            max_values: [u128; 3],
+            tree_depths: Vec<u8>,
+            batch_sizes: Vec<u8>,
+            max_values: Vec<u128>,
             sign_up_gatekeeper: AccountId,
             batch_ust_verifier: AccountId,
             qvt_verifier: AccountId,
             sign_up_duration_seconds: u128,
             voting_duration_seconds: u128,
             initial_voice_credit_proxy: AccountId,
-            coordinator_pub_key: PubKey,
+            coordinator_pub_key: Vec<Vec<u8>>,
             coordinator_address: AccountId,
         ) -> Self {
             ink::utils::initialize_contract(|se1f: &mut Self| {
@@ -308,16 +309,19 @@ mod maci {
                 // Set the initial voice credit balance proxy
                 se1f.initial_voice_credit_proxy = initial_voice_credit_proxy;
                 // Set the coordinator's public key
-                se1f.coordinator_pub_key = coordinator_pub_key; // [coordinator_pub_key.x,coordinator_pub_key.y];
+                se1f.coordinator_pub_key = PubKey {
+                    x: coordinator_pub_key[0].clone().try_into().unwrap(),
+                    y: coordinator_pub_key[1].clone().try_into().unwrap(),
+                }; // [coordinator_pub_key.x,coordinator_pub_key.y];
 
                 // Calculate and cache the max number of leaves for each tree.
                 // They are used as public inputs to the batch update state tree snark.
-                se1f.message_tree_max_leaf_index = 2u128.pow(tree_depths[1] as u32) - 1;
+                se1f.message_tree_max_leaf_index = 2u128.pow(se1f.tree_depths[1] as u32) - 1;
 
                 // Check and store the maximum number of signups
                 // It is the user's responsibility to ensure that the state tree depth
                 // is just large enough and not more, or they will waste gas.
-                let state_tree_max_leaf_index = 2u128.pow(tree_depths[0] as u32) - 1;
+                let state_tree_max_leaf_index = 2u128.pow(se1f.tree_depths[0] as u32) - 1;
                 se1f.max_users = max_values[0];
                 // The maximum number of messages
                 assert!(
@@ -333,11 +337,11 @@ mod maci {
                 let mut result: [u8; 32] = Default::default();
                 use ink_env::hash::CryptoHash;
                 ink_env::hash::Blake2x256::hash(ZERO_VALUE, &mut result);
-                se1f.multi_tree = MultiMerkleTree::new(tree_depths[0], result);
+                se1f.multi_tree = MultiMerkleTree::new(se1f.tree_depths[0], result);
                 // Calculate and store the empty vote option tree root. This value must
                 // be set before we call hashedBlankStateLeaf() later
                 se1f.empty_vote_option_tree_root =
-                    Self::calc_empty_vote_option_tree_root(tree_depths[2]);
+                    Self::calc_empty_vote_option_tree_root(se1f.tree_depths[2]);
                 // Calculate and store a commitment to 5 ** voteOptionTreeDepth zeros,
                 // and a salt of 0.
 

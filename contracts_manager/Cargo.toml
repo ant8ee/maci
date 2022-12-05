@@ -21,6 +21,7 @@ constant_initial_voice_credit_proxy= { version = "0.1.0", path = "../initial_voi
 user_defined_initial_voice_credit_proxy= { version = "0.1.0", path = "../initial_voice_credit_proxy/user_defined_initial_voice_credit_proxy", default-features = false, features = ["ink-as-dependency"] }
 signup_token= { version = "4.0.0-alpha.3", path = "../signup_token", default-features = false, features = ["ink-as-dependency"] }
 versatile_verifier= { version = "0.1.0", path = "../versatile_verifier", default-features = false, features = ["ink-as-dependency"] }
+maci= { version = "0.1.0", path = "../maci", default-features = false, features = ["ink-as-dependency"] }
 
 [lib]
 name = "contracts_manager"

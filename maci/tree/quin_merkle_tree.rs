@@ -207,7 +207,7 @@ mod tests {
     fn test_tree_indexes() {
         let mut tree = QuinMerkleTree::<TEST_MAX_DEPTH, 30, Blake>::new(ZERO_VALUE).unwrap();
 
-        for i in 0..5usize.pow(TEST_MAX_DEPTH as u32) {
+        for i in 0..2usize.pow(TEST_MAX_DEPTH as u32) {
             let index = tree.insert([i as u8; 32]).unwrap();
             assert_eq!(i, index);
             assert_eq!(i + 1, tree.next_index as usize);
@@ -218,7 +218,7 @@ mod tests {
     fn test_error_when_tree_is_full() {
         let mut tree = QuinMerkleTree::<3, 30, Blake>::new(ZERO_VALUE).unwrap();
 
-        for i in 0..5usize.pow(3) {
+        for i in 0..2usize.pow(3) {
             tree.insert([i as u8 + 1; 32]).unwrap();
         }
 

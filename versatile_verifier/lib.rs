@@ -6,7 +6,13 @@ mod library;
 
 #[ink::contract]
 mod versatile_verifier {
-    use ink_prelude::vec::Vec;
+     use ink_prelude::{
+        string::{
+            String,
+           
+        },
+        vec::Vec,
+    };
 
     use substrate_bn::{Fr, Group, G1 as G1Point};
 
@@ -16,22 +22,22 @@ mod versatile_verifier {
     /// to add new static storage fields to your contract.
     #[ink(storage)]
     pub struct VersatileVerifier {
-        alpha1: Vec<Vec<u8>>,
-        beta2: Vec<Vec<Vec<u8>>>,
-        gamma2: Vec<Vec<Vec<u8>>>,
-        delta2: Vec<Vec<Vec<u8>>>,
-        ic: Vec<Vec<Vec<u8>>>,
+        alpha1: Vec<String>,
+        beta2: Vec<Vec<String>>,
+        gamma2: Vec<Vec<String>>,
+        delta2: Vec<Vec<String>>,
+        ic: Vec<Vec<String>>,
     }
 
     impl VersatileVerifier {
         /// Constructor that initializes the `bool` value to the given `init_value`.
         #[ink(constructor)]
         pub fn new(
-            alpha1: Vec<Vec<u8>>,
-            beta2: Vec<Vec<Vec<u8>>>,
-            gamma2: Vec<Vec<Vec<u8>>>,
-            delta2: Vec<Vec<Vec<u8>>>,
-            ic: Vec<Vec<Vec<u8>>>,
+            alpha1: Vec<String>,
+            beta2: Vec<Vec<String>>,
+            gamma2: Vec<Vec<String>>,
+            delta2: Vec<Vec<String>>,
+            ic: Vec<Vec<String>>,
         ) -> Self {
             Self {
                 alpha1,
@@ -75,10 +81,10 @@ mod versatile_verifier {
         #[ink(message)]
         pub fn verify_proof(
             &self,
-            a: Vec<Vec<u8>>,
-            b: Vec<Vec<Vec<u8>>>,
-            c: Vec<Vec<u8>>,
-            input: Vec<Vec<u8>>,
+            a: Vec<String>,
+            b: Vec<Vec<String>>,
+            c: Vec<String>,
+            input: Vec<String>,
         ) -> bool {
             let proof = Proof {
                 a: Pairing::vec_to_g1point(&a),
@@ -132,12 +138,12 @@ mod versatile_verifier {
             //for (uint256 i = 0; i < input.length; i++) {
             for i in 0..10 {
                 assert!(
-                    Fr::from_slice(&input[i]).unwrap().into_u256() < Pairing::snark_scalar_field(),
+                    Fr::from_str(&input[i]).unwrap().into_u256() < Pairing::snark_scalar_field(),
                     "verifier-gte-snark-scalar-field"
                 );
                 vk_x = Pairing::plus(
                     vk_x,
-                    Pairing::scalar_mul(vk.ic[i + 1], Fr::from_slice(&input[i]).unwrap()),
+                    Pairing::scalar_mul(vk.ic[i + 1], Fr::from_str(&input[i]).unwrap()),
                 );
             }
 

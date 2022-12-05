@@ -15,27 +15,18 @@ macro_rules! ensure {
 }
 #[ink::contract]
 pub mod contracts_manager {
-    use ink_prelude::vec::Vec;
+    use ink_prelude::{ string::{
+            String,
+           
+        },vec, vec::Vec};
     use ink_storage::{traits::SpreadAllocate, Mapping};
     use scale::{Decode, Encode};
     #[ink(storage)]
     #[derive(Default, SpreadAllocate)]
     pub struct ContractsManager {
         /// Mapping Hash to  Address
-        hash_address: Mapping<Hash, AccountId>,
-        signup_token_gatekeeper: AccountId,
-        signup_token: AccountId,
-        versatile_verifier: AccountId,
-        free_for_all_signup_gatekeeper: AccountId,
-        user_defined_initial_voice_credit_proxy: AccountId,
-        constant_initial_voice_credit_proxy: AccountId,
-
-        signup_token_gatekeeper_hash: Hash,
-        free_for_all_signup_gatekeeper_hash: Hash,
-        user_defined_initial_voice_credit_proxy_hash: Hash,
-        constant_initial_voice_credit_proxy_hash: Hash,
-        signup_token_hash: Hash,
-        versatile_verifier_hash: Hash,
+        hash_addresses: Mapping<Hash, Vec<AccountId>>,
+        hashes: Vec<Hash>,
         endowment_amount: Balance,
         version: u32,
         /// The contract owner
@@ -65,6 +56,65 @@ pub mod contracts_manager {
         }
         #[ink(message)]
         #[cfg_attr(test, allow(unused_variables))]
+        pub fn instantiate_maci_contract(
+            &mut self,
+            code_hash: Hash,
+            tree_depths: Vec<u8>,
+            batch_sizes: Vec<u8>,
+            max_values: Vec<u128>,
+            sign_up_gatekeeper: AccountId,
+            batch_ust_verifier: AccountId,
+            qvt_verifier: AccountId,
+            sign_up_duration_seconds: u128,
+            voting_duration_seconds: u128,
+            initial_voice_credit_proxy: AccountId,
+            coordinator_pub_key: Vec<Vec<u8>>,
+            coordinator_address: AccountId,
+        ) -> Result<AccountId> {
+            ensure!(self.env().caller() == self.owner, Error::OnlyOwner);
+
+            let instantiate_contract = || {
+                #[cfg(test)]
+                {
+                    Ok(AccountId::from([0x0; 32]))
+                }
+                #[cfg(not(test))]
+                {
+                    let mut salt:Vec<u8> = self.version.to_le_bytes().to_vec();
+                    salt.extend(&tree_depths);
+                    salt.extend(&batch_sizes);
+                    let instance_params = maci::MaciRef::new(
+                        tree_depths,
+                        batch_sizes,
+                        max_values,
+                        sign_up_gatekeeper,
+                        batch_ust_verifier,
+                        qvt_verifier,
+                        sign_up_duration_seconds,
+                        voting_duration_seconds,
+                        initial_voice_credit_proxy,
+                        coordinator_pub_key,
+                        coordinator_address,
+                    )
+                    .endowment(self.endowment_amount)
+                    .code_hash(code_hash)
+                    .salt_bytes(salt)
+                    .params();
+                    let init_result = ink_env::instantiate_contract(&instance_params);
+                    let contract_addr =
+                        init_result.expect("failed at instantiating the `maci` contract");
+
+                    Ok(contract_addr)
+                }
+            };
+            let ans_contract_addr = instantiate_contract()?;
+            let mut hashes = self.hash_addresses.get(&code_hash).unwrap_or(Vec::new());
+            hashes.push(ans_contract_addr);
+            self.hash_addresses.insert(&code_hash, &hashes);
+            Ok(ans_contract_addr)
+        }
+        #[ink(message)]
+        #[cfg_attr(test, allow(unused_variables))]
         pub fn instantiate_signup_token_gatekeeper_contract(
             &mut self,
             code_hash: Hash,
@@ -79,7 +129,8 @@ pub mod contracts_manager {
                 }
                 #[cfg(not(test))]
                 {
-                    let salt = self.version.to_le_bytes();
+                    let mut salt:Vec<u8> = self.version.to_le_bytes().to_vec();
+                    salt.extend(token.encode());
                     let instance_params =
                         signup_token_gatekeeper::SignUpTokenGatekeeperRef::new(token)
                             .endowment(self.endowment_amount)
@@ -94,8 +145,9 @@ pub mod contracts_manager {
                 }
             };
             let ans_contract_addr = instantiate_contract()?;
-            self.signup_token_gatekeeper = ans_contract_addr;
-            self.hash_address.insert(&code_hash, &ans_contract_addr);
+            let mut hashes = self.hash_addresses.get(&code_hash).unwrap_or(Vec::new());
+            hashes.push(ans_contract_addr);
+            self.hash_addresses.insert(&code_hash, &hashes);
             Ok(ans_contract_addr)
         }
 
@@ -129,8 +181,9 @@ pub mod contracts_manager {
                 }
             };
             let ans_contract_addr = instantiate_contract()?;
-            self.free_for_all_signup_gatekeeper = ans_contract_addr;
-            self.hash_address.insert(&code_hash, &ans_contract_addr);
+            let mut hashes = self.hash_addresses.get(&code_hash).unwrap_or(Vec::new());
+            hashes.push(ans_contract_addr);
+            self.hash_addresses.insert(&code_hash, &hashes);
             Ok(ans_contract_addr)
         }
 
@@ -163,8 +216,9 @@ pub mod contracts_manager {
                 }
             };
             let ans_contract_addr = instantiate_contract()?;
-            self.user_defined_initial_voice_credit_proxy = ans_contract_addr;
-            self.hash_address.insert(&code_hash, &ans_contract_addr);
+            let mut hashes = self.hash_addresses.get(&code_hash).unwrap_or(Vec::new());
+            hashes.push(ans_contract_addr);
+            self.hash_addresses.insert(&code_hash, &hashes);
             Ok(ans_contract_addr)
         }
 
@@ -184,7 +238,8 @@ pub mod contracts_manager {
                 }
                 #[cfg(not(test))]
                 {
-                    let salt = self.version.to_le_bytes();
+                    let mut salt:Vec<u8> = self.version.to_le_bytes().to_vec();
+                    salt.extend(balance.encode());
                     let instance_params = constant_initial_voice_credit_proxy::ConstantInitialVoiceCreditProxyRef::new(balance)
                         .endowment(self.endowment_amount)
                         .code_hash(code_hash)
@@ -197,8 +252,9 @@ pub mod contracts_manager {
                 }
             };
             let ans_contract_addr = instantiate_contract()?;
-            self.constant_initial_voice_credit_proxy = ans_contract_addr;
-            self.hash_address.insert(&code_hash, &ans_contract_addr);
+            let mut hashes = self.hash_addresses.get(&code_hash).unwrap_or(Vec::new());
+            hashes.push(ans_contract_addr);
+            self.hash_addresses.insert(&code_hash, &hashes);
             Ok(ans_contract_addr)
         }
 
@@ -228,8 +284,9 @@ pub mod contracts_manager {
                 }
             };
             let ans_contract_addr = instantiate_contract()?;
-            self.signup_token = ans_contract_addr;
-            self.hash_address.insert(&code_hash, &ans_contract_addr);
+            let mut hashes = self.hash_addresses.get(&code_hash).unwrap_or(Vec::new());
+            hashes.push(ans_contract_addr);
+            self.hash_addresses.insert(&code_hash, &hashes);
             Ok(ans_contract_addr)
         }
 
@@ -238,11 +295,11 @@ pub mod contracts_manager {
         pub fn instantiate_versatile_verifier_contract(
             &mut self,
             code_hash: Hash,
-            alpha1: Vec<Vec<u8>>,
-            beta2: Vec<Vec<Vec<u8>>>,
-            gamma2: Vec<Vec<Vec<u8>>>,
-            delta2: Vec<Vec<Vec<u8>>>,
-            ic: Vec<Vec<Vec<u8>>>,
+            alpha1: Vec<String>,
+            beta2: Vec<Vec<String>>,
+            gamma2: Vec<Vec<String>>,
+            delta2: Vec<Vec<String>>,
+            ic: Vec<Vec<String>>,
         ) -> Result<AccountId> {
             ensure!(self.env().caller() == self.owner, Error::OnlyOwner);
 
@@ -253,7 +310,8 @@ pub mod contracts_manager {
                 }
                 #[cfg(not(test))]
                 {
-                    let salt = self.version.to_le_bytes();
+                    let mut salt:Vec<u8> = self.version.to_le_bytes().to_vec();
+                    salt.extend(alpha1.concat().bytes());
                     let instance_params = versatile_verifier::VersatileVerifierRef::new(
                         alpha1, beta2, gamma2, delta2, ic,
                     )
@@ -269,8 +327,9 @@ pub mod contracts_manager {
                 }
             };
             let ans_contract_addr = instantiate_contract()?;
-            self.versatile_verifier = ans_contract_addr;
-            self.hash_address.insert(&code_hash, &ans_contract_addr);
+            let mut hashes = self.hash_addresses.get(&code_hash).unwrap_or(Vec::new());
+            hashes.push(ans_contract_addr);
+            self.hash_addresses.insert(&code_hash, &hashes);
             Ok(ans_contract_addr)
         }
 
@@ -283,7 +342,7 @@ pub mod contracts_manager {
         }
 
         #[ink(message)]
-        pub fn update_parameters(
+        pub fn update_hashes(
             &mut self,
             signup_token_gatekeeper_hash: Hash,
             free_for_all_signup_gatekeeper_hash: Hash,
@@ -291,133 +350,82 @@ pub mod contracts_manager {
             constant_initial_voice_credit_proxy_hash: Hash,
             signup_token_hash: Hash,
             versatile_verifier_hash: Hash,
+            maci: Hash,
         ) -> Result<()> {
             ensure!(self.env().caller() == self.owner, Error::OnlyOwner);
-            self.signup_token_gatekeeper_hash = signup_token_gatekeeper_hash;
-            self.free_for_all_signup_gatekeeper_hash = free_for_all_signup_gatekeeper_hash;
-            self.user_defined_initial_voice_credit_proxy_hash =
-                user_defined_initial_voice_credit_proxy_hash;
-            self.constant_initial_voice_credit_proxy_hash =
-                constant_initial_voice_credit_proxy_hash;
-            self.signup_token_hash = signup_token_hash;
-            self.versatile_verifier_hash = versatile_verifier_hash;
+            self.hashes = vec![
+                signup_token_gatekeeper_hash,
+                free_for_all_signup_gatekeeper_hash,
+                user_defined_initial_voice_credit_proxy_hash,
+                constant_initial_voice_credit_proxy_hash,
+                signup_token_hash,
+                versatile_verifier_hash,
+            ];
             Ok(())
         }
         #[ink(message)]
         #[cfg_attr(test, allow(unused_variables))]
         pub fn instantiate_contracts(
             &mut self,
-            signup_token_gatekeeper_hash: Hash,
-            free_for_all_signup_gatekeeper_hash: Hash,
-            user_defined_initial_voice_credit_proxy_hash: Hash,
-            constant_initial_voice_credit_proxy_hash: Hash,
-            signup_token_hash: Hash,
-            versatile_verifier_hash: Hash,
+            tree_depths: Vec<u8>,
+            batch_sizes: Vec<u8>,
+            max_values: Vec<u128>,
+            sign_up_duration_seconds: u128,
+            voting_duration_seconds: u128,
+            coordinator_pub_key: Vec<Vec<u8>>,
+            coordinator_address: AccountId,
             balance: Balance,
-            alpha1: Vec<Vec<u8>>,
-            beta2: Vec<Vec<Vec<u8>>>,
-            gamma2: Vec<Vec<Vec<u8>>>,
-            delta2: Vec<Vec<Vec<u8>>>,
-            ic: Vec<Vec<Vec<u8>>>,
+            alpha1: Vec<String>,
+            beta2: Vec<Vec<String>>,
+            gamma2: Vec<Vec<String>>,
+            delta2: Vec<Vec<String>>,
+            ic: Vec<Vec<String>>,
         ) -> Result<()> {
             ensure!(self.env().caller() == self.owner, Error::OnlyOwner);
-            let token = self.instantiate_signup_token_contract(signup_token_hash)?;
-            self.instantiate_signup_token_gatekeeper_contract(signup_token_gatekeeper_hash, token)?;
-            self.instantiate_versatile_verifier_contract(
-                versatile_verifier_hash,
+            let token = self.instantiate_signup_token_contract(self.hashes[4])?;
+            self.instantiate_signup_token_gatekeeper_contract(self.hashes[0], token)?;
+            let gatekeeper =
+                self.instantiate_free_for_all_signup_gatekeeper_contract(self.hashes[1])?;
+            self.instantiate_user_defined_initial_voice_credit_proxy_contract(self.hashes[2])?;
+            let proxy = self.instantiate_constant_initial_voice_credit_proxy_contract(
+                self.hashes[3],
+                balance,
+            )?;
+            let verifier = self.instantiate_versatile_verifier_contract(
+                self.hashes[5],
                 alpha1,
                 beta2,
                 gamma2,
                 delta2,
                 ic,
             )?;
-            self.instantiate_free_for_all_signup_gatekeeper_contract(
-                free_for_all_signup_gatekeeper_hash,
-            )?;
-            self.instantiate_user_defined_initial_voice_credit_proxy_contract(
-                user_defined_initial_voice_credit_proxy_hash,
-            )?;
-            self.instantiate_constant_initial_voice_credit_proxy_contract(
-                constant_initial_voice_credit_proxy_hash,
-                balance,
+            self.instantiate_maci_contract(
+                self.hashes[6],
+                tree_depths,
+                batch_sizes,
+                max_values,
+                gatekeeper,
+                verifier,
+                verifier,
+                sign_up_duration_seconds,
+                voting_duration_seconds,
+                proxy,
+                coordinator_pub_key,
+                coordinator_address,
             )?;
             Ok(())
         }
 
-        /// Querying signup_token_gatekeeper contract address
-        /// # return signup_token_gatekeeper contract address
+        /// Querying hashes
+        /// # return hashes
         #[ink(message)]
-        pub fn signup_token_gatekeeper(&self) -> AccountId {
-            self.signup_token_gatekeeper
+        pub fn hashes(&self) -> Vec<Hash> {
+            self.hashes.clone()
         }
-        /// Querying free_for_all_signup_gatekeeper contract address
-        /// # return free_for_all_signup_gatekeeper contract address
         #[ink(message)]
-        pub fn free_for_all_signup_gatekeeper(&self) -> AccountId {
-            self.free_for_all_signup_gatekeeper
+        pub fn addresses_by_hash(&self, hash: Hash) -> Vec<AccountId> {
+            self.hash_addresses.get(&hash).unwrap_or(Vec::new()).clone()
         }
-        /// Querying constant_initial_voice_credit_proxy contract address
-        /// # return constant_initial_voice_credit_proxy contract address
-        #[ink(message)]
-        pub fn constant_initial_voice_credit_proxy(&self) -> AccountId {
-            self.constant_initial_voice_credit_proxy
-        }
-        /// Querying user_defined_initial_voice_credit_proxy contract address
-        /// # return user_defined_initial_voice_credit_proxy contract address
-        #[ink(message)]
-        pub fn user_defined_initial_voice_credit_proxy(&self) -> AccountId {
-            self.user_defined_initial_voice_credit_proxy
-        }
-        /// Querying signup_token contract address
-        /// # return signup_token contract address
-        #[ink(message)]
-        pub fn signup_token(&self) -> AccountId {
-            self.signup_token
-        }
-        /// Querying versatile_verifier contract address
-        /// # return versatile_verifier contract address
-        #[ink(message)]
-        pub fn versatile_verifier(&self) -> AccountId {
-            self.versatile_verifier
-        }
-
-        /// Querying signup_token_gatekeeper_hash
-        /// # return signup_token_gatekeeper_hash
-        #[ink(message)]
-        pub fn signup_token_gatekeeper_hash(&self) -> Hash {
-            self.signup_token_gatekeeper_hash
-        }
-        /// Querying free_for_all_signup_gatekeeper_hash
-        /// # return free_for_all_signup_gatekeeper_hash
-        #[ink(message)]
-        pub fn free_for_all_signup_gatekeeper_hash(&self) -> Hash {
-            self.free_for_all_signup_gatekeeper_hash
-        }
-        /// Querying constant_initial_voice_credit_proxy_hash
-        /// # return constant_initial_voice_credit_proxy_hash
-        #[ink(message)]
-        pub fn constant_initial_voice_credit_proxy_hash(&self) -> Hash {
-            self.constant_initial_voice_credit_proxy_hash
-        }
-        /// Querying user_defined_initial_voice_credit_proxy_hash
-        /// # return user_defined_initial_voice_credit_proxy_hash
-        #[ink(message)]
-        pub fn user_defined_initial_voice_credit_proxy_hash(&self) -> Hash {
-            self.user_defined_initial_voice_credit_proxy_hash
-        }
-        /// Querying signup_token_hash
-        /// # return signup_token_hash
-        #[ink(message)]
-        pub fn signup_token_hash(&self) -> Hash {
-            self.signup_token_hash
-        }
-        /// Querying versatile_verifier_hash
-        /// # return versatile_verifier_hash
-        #[ink(message)]
-        pub fn versatile_verifier_hash(&self) -> Hash {
-            self.versatile_verifier_hash
-        }
-
         #[ink(message)]
         pub fn version(&self) -> u32 {
             self.version

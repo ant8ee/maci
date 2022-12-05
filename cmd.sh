@@ -15,9 +15,9 @@ function build_module() {
       exit 1
     fi
     echo "copy to ../release"
-    cp ${m_dir}/target/ink/${m_name}.wasm ${WORK_DIR}//release/${m_name}_v$VERSION.wasm
-    cp ${m_dir}/target/ink/${m_name}.contract ${WORK_DIR}//release/${m_name}_v$VERSION.contract
-    cp ${m_dir}/target/ink/metadata.json ${WORK_DIR}//release/${m_name}_v$VERSION.json
+    cp -f ${m_dir}/target/ink/${m_name}.wasm ${WORK_DIR}//release/${m_name}_v$VERSION.wasm
+    cp -f ${m_dir}/target/ink/${m_name}.contract ${WORK_DIR}//release/${m_name}_v$VERSION.contract
+    cp -f ${m_dir}/target/ink/metadata.json ${WORK_DIR}//release/${m_name}_v$VERSION.json
     cd -
 }
 
@@ -34,14 +34,11 @@ function format_module() {
     cd -
 }
 
-echo "clean release"
-rm -rf ${WORK_DIR}/release
-mkdir -p ${WORK_DIR}/release
 
 function copy_abi(){
      basepath=$(pwd)
             srcpath=release
-            destpath=../../zkp/maci/contracts/compiled
+            destpath=../../zkp/maci_dot/contracts/ts/abi
             cp -f ${basepath}/${srcpath}/*.json ${basepath}/${destpath} 
 }
 
