@@ -1,10 +1,5 @@
- use ink_prelude::{
-        string::{
-            String,
-           
-        },
-        vec::Vec,
-    };
+
+use ink_prelude::{string::String, vec::Vec};
 
 use substrate_bn::{
     arith::U256, pairing_batch, Fq, Fq2, Fr, Group, Gt, G1 as G1Point, G2 as G2Point,
@@ -35,7 +30,7 @@ impl Pairing {
     pub fn prime_q() -> U256 {
         Fq::from_str(&Self::PRIME_Q).unwrap().into_u256()
     }
-    
+
     pub fn vec_to_g1point(vec: &Vec<String>) -> G1Point {
         G1Point::new(
             Fq::from_str(&vec[0]).unwrap(),

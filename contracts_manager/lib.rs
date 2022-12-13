@@ -15,10 +15,7 @@ macro_rules! ensure {
 }
 #[ink::contract]
 pub mod contracts_manager {
-    use ink_prelude::{ string::{
-            String,
-           
-        },vec, vec::Vec};
+    use ink_prelude::{string::String, vec, vec::Vec};
     use ink_storage::{traits::SpreadAllocate, Mapping};
     use scale::{Decode, Encode};
     #[ink(storage)]
@@ -80,7 +77,7 @@ pub mod contracts_manager {
                 }
                 #[cfg(not(test))]
                 {
-                    let mut salt:Vec<u8> = self.version.to_le_bytes().to_vec();
+                    let mut salt: Vec<u8> = self.version.to_le_bytes().to_vec();
                     salt.extend(&tree_depths);
                     salt.extend(&batch_sizes);
                     let instance_params = maci::MaciRef::new(
@@ -129,7 +126,7 @@ pub mod contracts_manager {
                 }
                 #[cfg(not(test))]
                 {
-                    let mut salt:Vec<u8> = self.version.to_le_bytes().to_vec();
+                    let mut salt: Vec<u8> = self.version.to_le_bytes().to_vec();
                     salt.extend(token.encode());
                     let instance_params =
                         signup_token_gatekeeper::SignUpTokenGatekeeperRef::new(token)
@@ -238,7 +235,7 @@ pub mod contracts_manager {
                 }
                 #[cfg(not(test))]
                 {
-                    let mut salt:Vec<u8> = self.version.to_le_bytes().to_vec();
+                    let mut salt: Vec<u8> = self.version.to_le_bytes().to_vec();
                     salt.extend(balance.encode());
                     let instance_params = constant_initial_voice_credit_proxy::ConstantInitialVoiceCreditProxyRef::new(balance)
                         .endowment(self.endowment_amount)
@@ -310,7 +307,7 @@ pub mod contracts_manager {
                 }
                 #[cfg(not(test))]
                 {
-                    let mut salt:Vec<u8> = self.version.to_le_bytes().to_vec();
+                    let mut salt: Vec<u8> = self.version.to_le_bytes().to_vec();
                     salt.extend(alpha1.concat().bytes());
                     let instance_params = versatile_verifier::VersatileVerifierRef::new(
                         alpha1, beta2, gamma2, delta2, ic,
@@ -322,6 +319,46 @@ pub mod contracts_manager {
                     let init_result = ink_env::instantiate_contract(&instance_params);
                     let contract_addr = init_result
                         .expect("failed at instantiating the `versatile_verifier` contract");
+
+                    Ok(contract_addr)
+                }
+            };
+            let ans_contract_addr = instantiate_contract()?;
+            let mut hashes = self.hash_addresses.get(&code_hash).unwrap_or(Vec::new());
+            hashes.push(ans_contract_addr);
+            self.hash_addresses.insert(&code_hash, &hashes);
+            Ok(ans_contract_addr)
+        }
+
+        #[ink(message)]
+        #[cfg_attr(test, allow(unused_variables))]
+        pub fn instantiate_quin_merkle_tree_contract(
+            &mut self,
+            code_hash: Hash,
+            tree_levels: u8,
+            version:u32,
+        ) -> Result<AccountId> {
+            ensure!(self.env().caller() == self.owner, Error::OnlyOwner);
+
+            let instantiate_contract = || {
+                #[cfg(test)]
+                {
+                    Ok(AccountId::from([0x0; 32]))
+                }
+                #[cfg(not(test))]
+                {
+                    let mut salt: Vec<u8> = version.to_le_bytes().to_vec();
+                    salt.extend(tree_levels.concat().bytes());
+                    let instance_params = quin_merkle_tree::QuinMerkleTreeRef::new(
+                        tree_levels,
+                    )
+                    .endowment(self.endowment_amount)
+                    .code_hash(code_hash)
+                    .salt_bytes(salt)
+                    .params();
+                    let init_result = ink_env::instantiate_contract(&instance_params);
+                    let contract_addr = init_result
+                        .expect("failed at instantiating the `quin_merkle_tree` contract");
 
                     Ok(contract_addr)
                 }

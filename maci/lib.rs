@@ -143,7 +143,10 @@ pub mod maci {
 
         // The tree that tracks the sign-up messages.
         // The tree that tracks each user's public key and votes
-        multi_tree: MultiMerkleTree,
+        // multi_tree: MultiMerkleTree,
+        l32_message_tree: QuinMerkleTree<32, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>,
+
+        // l32_state_tree: MerkleTree<32, DEFAULT_ROOT_HISTORY_SIZE, Poseidon>,
 
         original_spent_voice_credits_commitment: [u8; 32],
         original_current_results_commitment: [u8; 32],
@@ -279,91 +282,93 @@ pub mod maci {
         /// Constructor that initializes the `bool` value to the given `init_value`.
         #[ink(constructor)]
         pub fn new(
-            tree_depths: Vec<u8>,
-            batch_sizes: Vec<u8>,
-            max_values: Vec<u128>,
-            sign_up_gatekeeper: AccountId,
-            batch_ust_verifier: AccountId,
-            qvt_verifier: AccountId,
-            sign_up_duration_seconds: u128,
-            voting_duration_seconds: u128,
-            initial_voice_credit_proxy: AccountId,
-            coordinator_pub_key: Vec<Vec<u8>>,
-            coordinator_address: AccountId,
+            // tree_depths: Vec<u8>,
+            // batch_sizes: Vec<u8>,
+            // max_values: Vec<u128>,
+            // sign_up_gatekeeper: AccountId,
+            // batch_ust_verifier: AccountId,
+            // qvt_verifier: AccountId,
+            // sign_up_duration_seconds: u128,
+            // voting_duration_seconds: u128,
+            // initial_voice_credit_proxy: AccountId,
+            // coordinator_pub_key: Vec<Vec<u8>>,
+            // coordinator_address: AccountId,
         ) -> Self {
-            ink::utils::initialize_contract(|se1f: &mut Self| {
-                se1f.has_unprocessed_messages = true;
-                se1f.coordinator_address = coordinator_address;
-                se1f.tree_depths = tree_depths;
-                se1f.tally_batch_size = batch_sizes[0];
-                se1f.message_batch_size = batch_sizes[1];
-                // Set the verifier contracts
-                se1f.batch_ust_verifier = batch_ust_verifier;
-                se1f.qvt_verifier = qvt_verifier;
-                // Set the sign-up duration
-                se1f.sign_up_timestamp = Self::env().block_timestamp() as u128;
-                se1f.sign_up_duration_seconds = sign_up_duration_seconds;
-                se1f.voting_duration_seconds = voting_duration_seconds;
-                // Set the sign-up gatekeeper contract
-                se1f.sign_up_gatekeeper = sign_up_gatekeeper;
-                // Set the initial voice credit balance proxy
-                se1f.initial_voice_credit_proxy = initial_voice_credit_proxy;
-                // Set the coordinator's public key
-                se1f.coordinator_pub_key = PubKey {
-                    x: coordinator_pub_key[0].clone().try_into().unwrap(),
-                    y: coordinator_pub_key[1].clone().try_into().unwrap(),
-                }; // [coordinator_pub_key.x,coordinator_pub_key.y];
+            ink::utils::initialize_contract(|_: &mut Self| {
+                // se1f.has_unprocessed_messages = true;
+//                 se1f.coordinator_address = coordinator_address;
+//                 se1f.tree_depths = tree_depths;
+//                 se1f.tally_batch_size = batch_sizes[0];
+//                 se1f.message_batch_size = batch_sizes[1];
+//                 // Set the verifier contracts
+//                 se1f.batch_ust_verifier = batch_ust_verifier;
+//                 se1f.qvt_verifier = qvt_verifier;
+//                 // Set the sign-up duration
+//                 se1f.sign_up_timestamp = Self::env().block_timestamp() as u128;
+//                 se1f.sign_up_duration_seconds = sign_up_duration_seconds;
+//                 se1f.voting_duration_seconds = voting_duration_seconds;
+//                 // Set the sign-up gatekeeper contract
+//                 se1f.sign_up_gatekeeper = sign_up_gatekeeper;
+//                 // Set the initial voice credit balance proxy
+//                 se1f.initial_voice_credit_proxy = initial_voice_credit_proxy;
+//                 // Set the coordinator's public key
+//                 se1f.coordinator_pub_key = PubKey {
+//                     x: coordinator_pub_key[0].clone().try_into().unwrap(),
+//                     y: coordinator_pub_key[1].clone().try_into().unwrap(),
+//                 }; // [coordinator_pub_key.x,coordinator_pub_key.y];
+// ink_env::debug_println!("debug_log: {}", 1);
+//                 // Calculate and cache the max number of leaves for each tree.
+//                 // They are used as public inputs to the batch update state tree snark.
+//                 se1f.message_tree_max_leaf_index = 2u128.pow(se1f.tree_depths[1] as u32) - 1;
 
-                // Calculate and cache the max number of leaves for each tree.
-                // They are used as public inputs to the batch update state tree snark.
-                se1f.message_tree_max_leaf_index = 2u128.pow(se1f.tree_depths[1] as u32) - 1;
+//                 // Check and store the maximum number of signups
+//                 // It is the user's responsibility to ensure that the state tree depth
+//                 // is just large enough and not more, or they will waste gas.
+//                 let state_tree_max_leaf_index = 2u128.pow(se1f.tree_depths[0] as u32) - 1;
+//                 se1f.max_users = max_values[0];
+//                 // The maximum number of messages
+//                 assert!(
+//                     max_values[0] <= state_tree_max_leaf_index
+//                         || max_values[1] <= se1f.message_tree_max_leaf_index,
+//                     "E10"
+//                 );
+// ink_env::debug_println!("debug_log: {}", 2);
+//                 se1f.max_messages = max_values[1];
+//                 // The maximum number of leaves, minus one, of meaningful vote options.
+//                 // This allows the snark to do a no-op if the user votes for an option
+//                 // which has no meaning attached to it
+//                 se1f.vote_options_max_leaf_index = max_values[2];
+//                 let mut result: [u8; 32] = Default::default();
+//                 use ink_env::hash::CryptoHash;
+//                 ink_env::hash::Blake2x256::hash(ZERO_VALUE, &mut result);
+//                 se1f.multi_tree = MultiMerkleTree::new(se1f.tree_depths[0], result);
+//                 // Calculate and store the empty vote option tree root. This value must
+//                 // be set before we call hashedBlankStateLeaf() later
+//                 se1f.empty_vote_option_tree_root =
+//                     Self::calc_empty_vote_option_tree_root(se1f.tree_depths[2]);
+//                 // Calculate and store a commitment to 5 ** voteOptionTreeDepth zeros,
+//                 // and a salt of 0.
 
-                // Check and store the maximum number of signups
-                // It is the user's responsibility to ensure that the state tree depth
-                // is just large enough and not more, or they will waste gas.
-                let state_tree_max_leaf_index = 2u128.pow(se1f.tree_depths[0] as u32) - 1;
-                se1f.max_users = max_values[0];
-                // The maximum number of messages
-                assert!(
-                    max_values[0] <= state_tree_max_leaf_index
-                        || max_values[1] <= se1f.message_tree_max_leaf_index,
-                    "E10"
-                );
-                se1f.max_messages = max_values[1];
-                // The maximum number of leaves, minus one, of meaningful vote options.
-                // This allows the snark to do a no-op if the user votes for an option
-                // which has no meaning attached to it
-                se1f.vote_options_max_leaf_index = max_values[2];
-                let mut result: [u8; 32] = Default::default();
-                use ink_env::hash::CryptoHash;
-                ink_env::hash::Blake2x256::hash(ZERO_VALUE, &mut result);
-                se1f.multi_tree = MultiMerkleTree::new(se1f.tree_depths[0], result);
-                // Calculate and store the empty vote option tree root. This value must
-                // be set before we call hashedBlankStateLeaf() later
-                se1f.empty_vote_option_tree_root =
-                    Self::calc_empty_vote_option_tree_root(se1f.tree_depths[2]);
-                // Calculate and store a commitment to 5 ** voteOptionTreeDepth zeros,
-                // and a salt of 0.
+//                 se1f.original_current_results_commitment =
+//                     Hasher::hash_left_right(se1f.empty_vote_option_tree_root, [0u8; 32]);
 
-                se1f.original_current_results_commitment =
-                    Hasher::hash_left_right(se1f.empty_vote_option_tree_root, [0u8; 32]);
+//                 se1f.current_results_commitment = se1f.original_current_results_commitment;
+//                 se1f.original_spent_voice_credits_commitment =
+//                     Hasher::hash_left_right([0u8; 32], [0u8; 32]);
 
-                se1f.current_results_commitment = se1f.original_current_results_commitment;
-                se1f.original_spent_voice_credits_commitment =
-                    Hasher::hash_left_right([0u8; 32], [0u8; 32]);
+//                 se1f.current_spent_voice_credits_commitment =
+//                     se1f.original_spent_voice_credits_commitment;
+//                 se1f.current_per_vo_spent_voice_credits_commitment =
+//                     se1f.original_current_results_commitment;
 
-                se1f.current_spent_voice_credits_commitment =
-                    se1f.original_spent_voice_credits_commitment;
-                se1f.current_per_vo_spent_voice_credits_commitment =
-                    se1f.original_current_results_commitment;
+//                 // Compute the hash of a blank state leaf
+//                 let h = Self::hashed_blank_state_leaf(se1f.empty_vote_option_tree_root);
 
-                // Compute the hash of a blank state leaf
-                let h = Self::hashed_blank_state_leaf(se1f.empty_vote_option_tree_root);
-
-                // Create the state tree
-                // Make subsequent insertions start from leaf #1, as leaf #0 is only
-                // updated with random data if a command is invalid.
-                assert!(se1f.multi_tree.insert_state(h).is_ok());
+//                 // Create the state tree
+//                 // Make subsequent insertions start from leaf #1, as leaf #0 is only
+//                 // updated with random data if a command is invalid.
+//                 assert!(se1f.multi_tree.insert_state(h).is_ok());
+// ink_env::debug_println!("debug_log: {}", 3);
             })
         }
 
@@ -503,10 +508,10 @@ pub mod maci {
             let hashed_leaf = DomainObjs::hash_state_leaf(&state_leaf);
 
             // Insert the leaf
-            self.multi_tree.insert_state(hashed_leaf)?;
+            // self.multi_tree.insert_state(hashed_leaf)?;
 
             // Update a copy of the state tree root
-            self.state_root = self.get_state_tree_root();
+            // self.state_root = self.get_state_tree_root();
 
             self.num_sign_ups += 1;
 
@@ -547,7 +552,7 @@ pub mod maci {
             let leaf = DomainObjs::hash_message(&_message);
 
             // Insert the new leaf into the message tree
-            self.multi_tree.insert_message(leaf)?;
+            // self.multi_tree.insert_message(leaf)?;
 
             self.current_message_batch_index = (self.num_messages
                 / self.message_batch_size as u128)
@@ -604,7 +609,7 @@ pub mod maci {
             public_signals[1] = self.coordinator_pub_key.x;
             public_signals[2] = self.coordinator_pub_key.y;
             public_signals[3] = Hasher::u128_to_bytes(self.vote_options_max_leaf_index);
-            public_signals[4] = self.multi_tree.get_last_root_of_message();
+            // public_signals[4] = self.multi_tree.get_last_root_of_message();
             public_signals[5] = Hasher::u128_to_bytes(self.current_message_batch_index);
             public_signals[6] = Hasher::u128_to_bytes(message_batch_end_index);
             public_signals[7] = Hasher::u128_to_bytes(self.num_sign_ups);
@@ -899,14 +904,14 @@ pub mod maci {
         fn calc_empty_vote_option_tree_root(levels: u8) -> [u8; 32] {
             ComputeRoot::compute_empty_quin_root(levels, [0u8; 32])
         }
-        #[ink(message)]
-        pub fn get_message_tree_root(&self) -> [u8; 32] {
-            self.multi_tree.get_last_root_of_message()
-        }
-        #[ink(message)]
-        pub fn get_state_tree_root(&self) -> [u8; 32] {
-            self.multi_tree.get_last_root_of_state()
-        }
+        // #[ink(message)]
+        // pub fn get_message_tree_root(&self) -> [u8; 32] {
+        //     self.multi_tree.get_last_root_of_message()
+        // }
+        // #[ink(message)]
+        // pub fn get_state_tree_root(&self) -> [u8; 32] {
+        //     self.multi_tree.get_last_root_of_state()
+        // }
     }
     #[ink(impl)]
     impl Maci {
@@ -1172,8 +1177,8 @@ pub mod maci {
 
         /// We test a simple use case of our contract.
         #[ink::test]
-        fn it_works() {
-            // let mut maci = Maci::new(false);
+        fn it_maci_works() {
+            let mut maci = Maci::new(vec![4,4,2],vec![4,4],vec![15,15,3],AccountId::default(),AccountId::default(),AccountId::default(),3600,3600,AccountId::default(),vec![hex!["a050de41241ae222c8b5207c2528ae843d377c630192c49a89e7a940e1e27d00"].to_vec(),hex!["a050de41241ae222c8b5207c2528ae843d377c630192c49a89e7a940e1e27d00"].to_vec()],AccountId::default());
         }
     }
 }

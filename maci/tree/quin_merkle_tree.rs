@@ -18,6 +18,8 @@ pub struct QuinMerkleTree<
     const ROOT_HISTORY_SIZE: usize,
     Hash: MerkleTreeHasher,
 > {
+    /// Merkle tree zeros
+    // pub zeros: Array<Hash::Output, DEPTH>,
     ///Current root index in the history
     pub current_root_index: u64,
     /// Next leaf index
@@ -26,8 +28,7 @@ pub struct QuinMerkleTree<
     pub filled_subtrees: Array<[Hash::Output; LEAVES_PER_NODE], DEPTH>,
     /// Merkle tree roots history
     pub roots: Array<Hash::Output, ROOT_HISTORY_SIZE>,
-    /// Merkle tree zeros
-    pub zeros: Array<Hash::Output, DEPTH>,
+
 }
 
 impl<const DEPTH: usize, const ROOT_HISTORY_SIZE: usize, Hash: MerkleTreeHasher>
@@ -43,25 +44,24 @@ impl<const DEPTH: usize, const ROOT_HISTORY_SIZE: usize, Hash: MerkleTreeHasher>
             return Err(MerkleTreeError::DepthIsZero);
         }
         let mut current_zero = zero_value;
-        let mut zeros = Array([zero_value; DEPTH]);
-        for i in 0..DEPTH {
-            let temp = [current_zero; LEAVES_PER_NODE];
-            zeros.0[i] = current_zero;
-            current_zero = Hash::hash5(temp);
-        }
+        // let mut zeros = Array([zero_value; DEPTH]);
+        // for i in 0..DEPTH {
+        //     let temp = [current_zero; LEAVES_PER_NODE];
+        //     zeros.0[i] = current_zero;
+        //     current_zero = Hash::hash5(temp);
+        // }
 
-        let roots = Array([zeros.0[DEPTH - 1]; ROOT_HISTORY_SIZE]);
+        let roots = Array([zero_value; ROOT_HISTORY_SIZE]);
         let mut filled_subtrees: Array<[Hash::Output; LEAVES_PER_NODE], DEPTH> = Default::default();
-        for i in 0..DEPTH {
-            filled_subtrees.0[i] = [zeros.0[i]; LEAVES_PER_NODE];
-        }
+        // for i in 0..DEPTH {
+        //     filled_subtrees.0[i] = [zeros.0[i]; LEAVES_PER_NODE];
+        // }
 
         Ok(Self {
             current_root_index: 0,
             next_index: 0,
             filled_subtrees,
             roots,
-            zeros,
         })
     }
 
@@ -94,7 +94,7 @@ impl<const DEPTH: usize, const ROOT_HISTORY_SIZE: usize, Hash: MerkleTreeHasher>
     pub fn insert(&mut self, leaf: Hash::Output) -> Result<usize, MerkleTreeError> {
         let next_index = self.next_index as usize;
 
-        if self.next_index == (LEAVES_PER_NODE as u64).pow(DEPTH as u32) {
+        if self.next_index == (2 as u64).pow(DEPTH as u32) {
             return Err(MerkleTreeError::MerkleTreeIsFull);
         }
 

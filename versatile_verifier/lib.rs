@@ -6,13 +6,7 @@ mod library;
 
 #[ink::contract]
 mod versatile_verifier {
-     use ink_prelude::{
-        string::{
-            String,
-           
-        },
-        vec::Vec,
-    };
+    use ink_prelude::{string::String, vec::Vec};
 
     use substrate_bn::{Fr, Group, G1 as G1Point};
 

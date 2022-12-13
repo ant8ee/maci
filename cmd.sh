@@ -9,7 +9,7 @@ function build_module() {
     m_dir=${WORK_DIR}/${m_subdir}/${m_name}
     echo "build module ${m_dir}"
     cd ${m_dir}
-    cargo +nightly contract build
+    cargo +nightly contract build --release
     if [ $? -ne 0 ];then
       echo "build module failed"
       exit 1
@@ -38,21 +38,22 @@ function format_module() {
 function copy_abi(){
      basepath=$(pwd)
             srcpath=release
-            destpath=../../zkp/maci_dot/contracts/ts/abi
+            destpath=../../zkp/maci_dot/contracts/abi
             cp -f ${basepath}/${srcpath}/*.json ${basepath}/${destpath} 
 }
 
 case $1 in
         b)
           echo "build module "
-            build_module maci
-            build_module versatile_verifier
-            build_module signup_token
-            build_module contracts_manager
-            build_module free_for_all_signup_gatekeeper gatekeepers
-            build_module signup_token_gatekeeper gatekeepers
-            build_module constant_initial_voice_credit_proxy initial_voice_credit_proxy
-            build_module user_defined_initial_voice_credit_proxy initial_voice_credit_proxy
+            build_module quin_merkle_tree
+            # build_module maci
+            # build_module versatile_verifier
+            # build_module signup_token
+            # build_module contracts_manager
+            # build_module free_for_all_signup_gatekeeper gatekeepers
+            # build_module signup_token_gatekeeper gatekeepers
+            # build_module constant_initial_voice_credit_proxy initial_voice_credit_proxy
+            # build_module user_defined_initial_voice_credit_proxy initial_voice_credit_proxy
         ;;
         f)
           echo "format code"
